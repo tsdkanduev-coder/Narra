@@ -32,7 +32,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Client P1–P8: см. статусы выше. Живой reader path (имена → карточка → чат, врезки, 4 таба) на устройстве не проверен.
 - Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
 
-## P0 — backend reader path · 2026-08-31 · (этот коммит)
+## P0 — backend reader path · 2026-08-31 · a19a07ce
 
 - `loadSceneContext`: любая published-разметка; publication не только shadow; текст из любого analysis run книги.
 - `ensureSceneSlot`: requeue failed `scene_image` при priority ≥ 45 (prefetch и scenes/at).
