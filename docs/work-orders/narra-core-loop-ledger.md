@@ -25,6 +25,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P1 | `packages/app-expo/NARRA_GATEWAY.md` не перечислял scenes/at, progress, catalog, `/v2/speech/synthesize` | fixed `dbb9e7eb` |
 | P0 | «Мой путь» скрывал locked и private; тап по locked — no-op | fixed `2054fe69` |
 | P1 | gateway `scene-generation.mjs` без канона fanart (cinematic / empty genre) | fixed `e27322cc` |
+| P0 | `generateBookScene` слал пустые genre/chapter | fixed `570ebc01` |
 | P0 | Catalog ingest / marking_up оставлял v2-константу; «Война и мир» без analysis-run | fixed `b3aefcbc` |
 | P0 | `POST /v2/ai/chat/complete` отвечал без `GET /:bookEditionId/search` | fixed `e0c24363` |
 
@@ -46,6 +47,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `e27322cc` P0: fanart-хвост в gateway scene prompt
 - `b3aefcbc` P0: catalog marking_up → book-analysis backfill; v2 только private
 - `e0c24363` P0: chat/complete ищет книгу до LLM
+- `570ebc01` P0: generateBookScene берёт жанр издания и главу
 
 ### Что всплыло после более поздней фазы
 
@@ -55,6 +57,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - После P4: scene prompt на gateway без fanart-канона — fixed `e27322cc`.
 - После P4: catalog marking_up без analysis-run (Война и мир) — fixed `b3aefcbc`.
 - После P4: чат героя без поиска по книге — fixed `e0c24363`.
+- После fanart-хвоста: generateBookScene всё ещё слал пустые genre/chapter — fixed `570ebc01`.
 
 ### Что остаётся
 
@@ -66,7 +69,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. Это legacy private-путь. Catalog ingest и startup-backfill зовут `ensureAnalysisRun` / `restartAnalysisRun` (v3). Константу v2 не переворачивали.
 - `narra-gateway-fetch.ts` и `eas.json` дефолт всё ещё `api-test.narra.disrupt.builders` (staging; `api.narra.disrupt.builders` — алиас). Хост без нового канона не меняли.
 - `/v2/media/images` (sceneJobRunner / client one-off) по-прежнему gigachat-image; `generateInternalScene` для scenes/at идёт через cover provider (gpt-image-2). Не меняли HTTP.
-- `generateBookScene` всё ещё передаёт пустые `genreId` / `chapter`; жанр тогда выводится из названия и отрывка, fanart-хвост уже канонический.
+- `generateBookScene` берёт жанр из `book_edition_genres` и главу из `content_navigation`; если главы нет — поле пустое, жанр тогда из названия.
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
 - Документ `NARRA_GATEWAY.md` сверяет маршруты, формы запросов не переписывались. Речь: `POST /v2/speech/synthesize`.
 - `scenes/at` не ставит отдельную v3-разметку в очередь — v3 идёт своим analysis-пайплайном.
@@ -100,6 +103,13 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - HTTP-форма остальных полей не менялась. Stream-чат не грунтуем.
 - Проверки: book-chat-grounding 4/4, contracts (optional UUID), tsc app-expo 0.
 - Не проверено: живой индекс и устройство.
+
+## P0 — genre/chapter в generateBookScene · 2026-08-31 · 570ebc01
+
+- `getBookSceneInput` читает `book_edition_genres` и сегмент `content_navigation`.
+- `generateBookScene` передаёт их в `sceneGenerationPrompt`. Публичный HTTP не менялся.
+- Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
+- Не проверено: живая генерация сцены «Война и мир».
 
 ## leftover P1 — scenes/at без normalized_text_* · 2026-08-31 · 22162ae1
 
