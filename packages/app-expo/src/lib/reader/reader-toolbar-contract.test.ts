@@ -5,6 +5,16 @@ function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
+describe("Android reader toolbar", () => {
+  it("exposes listen and characters actions instead of an empty bar", () => {
+    const toolbar = read("../../screens/reader/ReaderToolbar.tsx");
+    expect(toolbar).toContain("export const TOOLBAR_HEIGHT = 50");
+    expect(toolbar).toContain('t("reader.listen", "Слушать")');
+    expect(toolbar).toContain('t("narra.characters", "Персонажи")');
+    expect(toolbar).not.toContain("return null");
+  });
+});
+
 describe("iOS reader toolbar contract", () => {
   it("uses the compact localized stop action", () => {
     const toolbar = read("../../screens/reader/ReaderToolbar.ios.tsx");

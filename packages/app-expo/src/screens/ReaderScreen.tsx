@@ -2200,8 +2200,7 @@ function ReaderContent({ route, navigation }: Props) {
     </Reanimated.View>
   );
 
-  const readerToolbarDock =
-    Platform.OS === "ios" ? (
+  const readerToolbarDock = (
       <Reanimated.View
         pointerEvents={loading || !showControls ? "none" : "auto"}
         style={[
@@ -2229,7 +2228,7 @@ function ReaderContent({ route, navigation }: Props) {
           onCharactersPress={handleOpenCharacters}
         />
       </Reanimated.View>
-    ) : null;
+    );
 
   if (loading && !webViewReady && !readerHtmlUri) {
     return (
