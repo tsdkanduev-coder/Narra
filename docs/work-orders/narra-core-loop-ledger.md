@@ -43,6 +43,16 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30.
 - Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
 
+## P3 — таббар 4 таба · 2026-08-31 · 3f3c192c
+
+- `TabNavigator`: Библиотека · Читалка · Мой путь · Профиль, подписи включены.
+- `ReadingTabScreen` подключён как таб 2 (последняя книга через `openMobileBook` → root Reader `fullScreenModal`).
+- Бывший таб Чаты оставлен маршрутом `Chats`, подпись `tabs.myPath` («Мой путь»). `MyPathScreen` не создавался.
+- Поиск убран из таббара (`tabBarSystemItem` снят) и переехал в стек Профиля (`ProfileSearch` + пункт меню).
+- Проверки: vitest tab-navigator-contract 1/1, tsc app-expo 0.
+- Не проверено: симулятор / устройство (холодный старт Читалки ≤ 2 c).
+- Не трогали: Reader `fullScreenModal`, matcher имён, scene slots, iOS TTS, card chat CTA. Android `ReaderToolbar` по-прежнему `null` (P2).
+
 ## P1 — fanart-стиль генераций · 2026-08-31 · 9daea76f
 
 - `ART_STYLE` возвращён к канону work order (книжная иллюстрация, не anime).
