@@ -720,6 +720,7 @@ function ReaderContent({ route, navigation }: Props) {
   const narraSceneAnchorBindings = useNarraStore(
     (state) => state.books[bookId]?.sceneAnchorBindings,
   );
+  const narraScenesByBackendId = useNarraStore((state) => state.books[bookId]?.scenesByBackendId);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Each book owns separate operations; changing books aborts only the previous ones.
   const sceneSlotActions = useMemo(() => new Map<string, AbortController>(), [bookId]);
   useEffect(
@@ -1522,9 +1523,14 @@ function ReaderContent({ route, navigation }: Props) {
   // Якоря сохранённых сцен: WebView восстанавливает врезки при загрузке
   // секций и просит картинки событием sceneSlotRestored
   const sceneAnchorsJson = useMemo(() => {
-    const anchors = sceneInsertAnchors(narraScenes, narraSceneRequests, narraSceneAnchorBindings);
+    const anchors = sceneInsertAnchors(
+      narraScenes,
+      narraSceneRequests,
+      narraSceneAnchorBindings,
+      narraScenesByBackendId,
+    );
     return anchors.length ? JSON.stringify(anchors) : null;
-  }, [narraScenes, narraSceneRequests, narraSceneAnchorBindings]);
+  }, [narraScenes, narraSceneRequests, narraSceneAnchorBindings, narraScenesByBackendId]);
   const setSceneAnchors = bridge.setSceneAnchors;
   useEffect(() => {
     if (!webViewReady) return;

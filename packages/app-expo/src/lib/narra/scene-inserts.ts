@@ -27,6 +27,7 @@ export function sceneInsertAnchors(
   scenes: Record<string, NarraSceneImage> | undefined,
   requests?: NarraBookState["sceneRequests"],
   bindings?: NarraBookState["sceneAnchorBindings"],
+  scenesByBackendId?: NarraBookState["scenesByBackendId"],
 ): string[] {
   const anchors: string[] = Object.keys(bindings ?? {});
   anchors.push(
@@ -35,7 +36,7 @@ export function sceneInsertAnchors(
       .map((key) => key.slice(SCENE_PAGE_SOURCE_PREFIX.length).trim())
       .filter(Boolean),
   );
-  for (const scene of Object.values(scenes ?? {})) {
+  for (const scene of [...Object.values(scenes ?? {}), ...Object.values(scenesByBackendId ?? {})]) {
     const anchor = scene.anchor?.trim();
     if (anchor && scene.imageUri && !anchors.includes(anchor)) {
       anchors.push(anchor);

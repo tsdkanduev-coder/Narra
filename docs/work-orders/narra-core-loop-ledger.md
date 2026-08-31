@@ -17,6 +17,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | fixed `3f3c192c` |
 | P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
 | P1 | Канонический якорь сцены стирал inset на втором CFI той же sceneKey | fixed `c3443f80` |
+| P2 | `sceneInsertAnchors` читал только `book.scenes`, не `scenesByBackendId` | open until cheap restore ships |
 | P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
 | P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | unmet until P8 |
 
