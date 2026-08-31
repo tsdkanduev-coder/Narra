@@ -64,7 +64,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 
 - `withBackendSceneIntent` больше не стирает `sceneAnchorBindings` у неканонического CFI той же `sceneKey`.
 - `generateBackendReaderScene` не снимает живой слот; `display`/`replaceSceneSlot` на тапнутый CFI и на канонический, если он в DOM.
-- Проверки: vitest backend-scene-reader + backend-scene-state + scene-inserts 18/18, tsc app-expo 0.
+- Refinement: биндинг `sceneAnchorBindings[input.anchor] = id` сохраняется после persist/reload — слот не залипает на «Рисуем…».
+- Проверки: vitest backend-scene-reader + backend-scene-state + scene-inserts + tab-navigator 20/20.
 - Не проверено: живой reader (два слота одной сцены на устройстве).
 - Не трогали: desktop FoliateViewer, интервал врезок 4 vs 8, Android ReaderToolbar.
 

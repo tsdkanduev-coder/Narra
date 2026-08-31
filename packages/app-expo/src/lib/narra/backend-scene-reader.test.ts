@@ -172,6 +172,22 @@ describe("reader backend scene action and persistence", () => {
       ["cfi-a", "cfi-b"],
     );
   });
+  it("after persist/reload the tapped non-canonical CFI still restores instead of staying on Рисуем", async () => {
+    await generateBackendReaderScene(
+      { ...input(), anchor: "cfi-a", sourceKey: "page:cfi-a" },
+      new AbortController().signal,
+    );
+    await generateBackendReaderScene(
+      { ...input(), anchor: "cfi-b", sourceKey: "page:cfi-b" },
+      new AbortController().signal,
+    );
+    useNarraStore.setState({ books: JSON.parse(JSON.stringify(useNarraStore.getState().books)) });
+    const book = state();
+    expect(book.sceneAnchorBindings?.["cfi-b"]).toBe(book.sceneAnchorBindings?.["cfi-a"]);
+    expect(
+      sceneInsertAnchors(book.scenes, book.sceneRequests, book.sceneAnchorBindings, book.scenesByBackendId),
+    ).toEqual(["cfi-a", "cfi-b"]);
+  });
   it("keeps references for a no-op intent update and strips extra response fields", () => {
     const action = input();
     const request = { ...action.intent, imageUrl: ready.image_url };
