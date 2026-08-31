@@ -62,8 +62,9 @@ vi.mock("@/stores", () => ({
 
 import { narraGatewayRequest } from "@/lib/ai/narra-gateway-fetch";
 import { recordTelemetry } from "@/lib/analytics/telemetry";
-import { ART_STYLE, PROMPT_CHAR_LIMIT } from "./art-style";
+import { ART_STYLE, PROMPT_CHAR_LIMIT, budgetPrompt } from "./art-style";
 import {
+  buildFanartPortraitPrompt,
   buildNarraSpeechSsml,
   buildSafetyFallbackSceneImagePrompt,
   buildSceneImagePrompt,
@@ -142,6 +143,8 @@ describe("portrait prompt", () => {
     expect(prompt).toContain("Внешность (соблюдать точно):");
     expect(prompt).toContain("тёмные волосы");
     expect(prompt).not.toContain("semi-realistic anime");
+    expect(prompt).toContain(ART_STYLE);
+    expect(prompt.endsWith(`Стиль: ${ART_STYLE}.`)).toBe(true);
     expect(prompt.length).toBeLessThanOrEqual(PORTRAIT_PROMPT_CHAR_LIMIT);
   });
 
@@ -243,6 +246,26 @@ describe("portrait prompt", () => {
 
     expect(prompt).toContain("жанра «фанфик или трансформативная проза»");
     expect(prompt).toContain("полуреалистичная аниме-иллюстрация момента");
+  });
+});
+
+describe("P1 acceptance: fanart portrait, scene and cover", () => {
+  it("собирает три промпта короче 950 знаков со стилем целиком", () => {
+    const excerpt = `Анна вошла в зал. ${"Свет свечей дрожал на паркете, гости расступались. ".repeat(60)}`;
+    const portrait = buildFanartPortraitPrompt(anna);
+    const scene = buildSceneImagePrompt("Бал", excerpt, [anna, vronsky]);
+    const cover = budgetPrompt([
+      "Обложка книги «Анна Каренина».",
+      "Автор: Лев Толстой.",
+      `Тема: ${"Роман о семье, любви и давлении общества. ".repeat(30)}`,
+      "Вертикальная книжная обложка, единая серия с портретами и сценами героев.",
+    ]);
+
+    for (const prompt of [portrait, scene, cover]) {
+      expect(prompt.length).toBeLessThanOrEqual(PROMPT_CHAR_LIMIT);
+      expect(prompt).toContain(ART_STYLE);
+      expect(prompt.endsWith(`Стиль: ${ART_STYLE}.`)).toBe(true);
+    }
   });
 });
 

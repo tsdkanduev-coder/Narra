@@ -209,6 +209,15 @@ export function portraitPrompt(
   return buildCharacterPortraitPrompt(character, { bookContext, genreId, genreLabel });
 }
 
+/** Портрет по канону work order: погрудный кадр + паспорт + ART_STYLE, бюджет 950. */
+export function buildFanartPortraitPrompt(character: NarraCharacter): string {
+  return budgetPrompt([
+    "Погрудный портрет: голова и плечи, строго анфас, ровный светлый фон.",
+    `Выражение лица: ${character.expression || "естественное, в характере"}.`,
+    `Внешность (соблюдать точно): ${passportDescription(character)}.`,
+  ]);
+}
+
 function imagePayload(payload: unknown): { base64?: string; url?: string; error?: string } {
   if (!payload || typeof payload !== "object") return {};
   const value = payload as {
