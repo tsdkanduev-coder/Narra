@@ -16,6 +16,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P1 | На `main` ART_STYLE — semi-realistic anime, не канон work order | fixed `9daea76f` |
 | P0 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | fixed `3f3c192c` |
 | P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
+| P1 | Канонический якорь сцены стирал inset на втором CFI той же sceneKey | open until scene-anchor ships |
 | P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
 | P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | unmet until P8 |
 

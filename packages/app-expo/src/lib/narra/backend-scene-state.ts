@@ -64,30 +64,19 @@ export function withBackendSceneIntent(
   }
 
   const canonical = canonicalAnchor(book, id, anchor, intent);
-  const removed = new Set<string>();
   const bindings = { ...book.sceneAnchorBindings };
-  for (const [boundAnchor, boundId] of Object.entries(bindings)) {
-    if (boundId === id && boundAnchor !== canonical) {
-      delete bindings[boundAnchor];
-      removed.add(boundAnchor);
-    }
-  }
+  // Один asset на sceneKey, но каждый тапнутый CFI должен остаться в bindings:
+  // иначе после reload sceneInsertAnchors не восстановит слот («Рисуем…»).
+  bindings[anchor] = id;
   bindings[canonical] = id;
 
   const requests = { ...book.sceneRequests };
-  for (const [key, request] of Object.entries(requests)) {
-    if (backendSceneId(request) === id && key !== sceneSourceKeyForAnchor(canonical)) {
-      const duplicate = anchorForSourceKey(key);
-      if (duplicate) removed.add(duplicate);
-      delete requests[key];
-    }
-  }
+  requests[sceneSourceKeyForAnchor(anchor)] = intent;
   requests[sceneSourceKeyForAnchor(canonical)] = intent;
-  if (anchor !== canonical) removed.add(anchor);
 
   return {
     book: { ...book, sceneRequests: requests, sceneAnchorBindings: bindings },
-    change: { backendSceneId: id, canonicalAnchor: canonical, removedAnchors: [...removed] },
+    change: { backendSceneId: id, canonicalAnchor: canonical, removedAnchors: [] },
   };
 }
 
