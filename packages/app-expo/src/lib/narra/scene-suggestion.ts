@@ -9,7 +9,7 @@
 
 /** Варианты настройки «Частота врезок»: страниц между предложениями, 0 — выкл. */
 export const SCENE_SUGGESTION_INTERVALS = [3, 4, 8, 0] as const;
-export const DEFAULT_SCENE_SUGGESTION_INTERVAL = 4;
+export const DEFAULT_SCENE_SUGGESTION_INTERVAL = 8;
 
 /**
  * Первая врезка сессии книги показывается раньше обычного интервала — после
