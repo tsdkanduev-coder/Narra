@@ -123,6 +123,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
   const greetingRequestedRef = useRef(false);
   const placeholderRequestedRef = useRef<string | null>(null);
   const unlocked = Boolean(book && character && isCharacterUnlocked(book.progress, character));
+  const bookEditionId = narraBook?.backendBinding?.bookEditionId || book?.bookEditionId;
   const characterStatus =
     sending || greetingLoading
       ? t("narra.characterTyping", "Печатает...")
@@ -260,6 +261,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
           purpose: "character_chat",
           origin: "user",
           analyticsTier: "essential",
+          bookEditionId,
         });
         if (content) appendGreeting(content);
       } catch (error) {
@@ -270,7 +272,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
         setGreetingLoading(false);
       }
     })();
-  }, [book, bookId, character, characterId, interfaceLanguage, messages.length, unlocked]);
+  }, [book, bookEditionId, bookId, character, characterId, interfaceLanguage, messages.length, unlocked]);
 
   const refreshMemory = useCallback(
     async (updatedMessages: NarraChatMessage[]) => {
@@ -329,6 +331,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
           purpose: "character_chat",
           origin: "user",
           analyticsTier: "essential",
+          bookEditionId,
         });
         const assistantMessage: NarraChatMessage = {
           id: assistantMessageId,
@@ -349,6 +352,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
     [
       append,
       book,
+      bookEditionId,
       bookId,
       character,
       characterId,

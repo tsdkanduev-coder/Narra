@@ -94,7 +94,7 @@ export function parseChatBody(input, { stream = false } = {}) {
   const body = object(input)
   onlyKeys(body, new Set([
     'messages', 'temperature', 'purpose', 'request_id', 'origin', 'analytics_tier',
-    'tools', 'tool_choice', 'parallel_tool_calls'
+    'tools', 'tool_choice', 'parallel_tool_calls', 'book_edition_id'
   ]))
   if (!Array.isArray(body.messages) || body.messages.length < 1 || body.messages.length > 64) {
     fail('messages: нужен массив из 1–64 сообщений')
@@ -193,12 +193,19 @@ export function parseChatBody(input, { stream = false } = {}) {
   if (origin === 'background' && analyticsTier === 'essential') {
     fail('analytics_tier: background-запрос не может быть essential')
   }
+  const bookEditionId = body.book_edition_id === undefined
+    ? undefined
+    : string(body.book_edition_id, 'book_edition_id', { max: 36 })
+  if (bookEditionId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(bookEditionId)) {
+    fail('book_edition_id: нужен UUID')
+  }
   return {
     messages,
     purpose,
     requestId,
     origin,
     analyticsTier,
+    bookEditionId,
     ...(tools ? { tools } : {}),
     ...(toolChoice !== undefined ? { toolChoice } : {}),
     ...(parallelToolCalls !== undefined ? { parallelToolCalls } : {})

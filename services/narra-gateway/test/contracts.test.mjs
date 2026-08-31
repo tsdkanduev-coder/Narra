@@ -11,6 +11,21 @@ import {
 } from '../contracts.mjs'
 import { parseEventBatch } from '../events.mjs'
 
+test('chat contract accepts optional book_edition_id for search grounding', () => {
+  const parsed = parseChatBody({
+    messages: [{ role: 'user', content: 'hello' }],
+    book_edition_id: '123e4567-e89b-42d3-a456-426614174000'
+  })
+  assert.equal(parsed.bookEditionId, '123e4567-e89b-42d3-a456-426614174000')
+  assert.throws(
+    () => parseChatBody({
+      messages: [{ role: 'user', content: 'hello' }],
+      book_edition_id: 'not-a-uuid'
+    }),
+    /book_edition_id/
+  )
+})
+
 test('chat contract accepts purpose, ignores client temperature and rejects client-selected provider', () => {
   const parsed = parseChatBody({
     messages: [{ role: 'user', content: 'hello' }],
@@ -39,7 +54,8 @@ test('background chat analytics is explicit and can be actorless after opt-out',
       purpose: 'structured_task',
       requestId: undefined,
       origin: 'background',
-      analyticsTier: 'none'
+      analyticsTier: 'none',
+      bookEditionId: undefined
     }
   )
   assert.throws(

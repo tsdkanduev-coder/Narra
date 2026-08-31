@@ -37,7 +37,9 @@ shapes.
 ## LLM
 
 - `POST /v2/ai/chat/stream` — character analysis (SSE or `{ "text": "..." }`)
-- `POST /v2/ai/chat/complete` — character chat and memory (`{ "text": "..." }`)
+- `POST /v2/ai/chat/complete` — character chat and memory (`{ "text": "..." }`). Optional
+  `book_edition_id` (UUID) makes the gateway retrieve `GET /v2/books/:bookEditionId/search`
+  before the LLM. Existing clients may omit the field.
 
 The Gateway owns model sampling. A legacy `temperature` field is still accepted for compatibility
 and ignored.

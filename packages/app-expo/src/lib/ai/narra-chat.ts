@@ -25,6 +25,8 @@ export interface NarraChatRequest {
   purpose?: "character_chat" | "structured_task" | "summary" | "scenario" | "memory";
   origin?: "user" | "background";
   analyticsTier?: "none" | "essential";
+  /** Каноническое издание для GET /v2/books/:id/search до ответа модели. */
+  bookEditionId?: string;
 }
 
 type ChatCompletionResponse = { text?: string; content?: string; error?: string };
@@ -57,6 +59,7 @@ export async function completeNarraChat(request: NarraChatRequest): Promise<stri
         purpose: request.purpose ?? "character_chat",
         origin,
         analytics_tier: request.analyticsTier ?? (origin === "background" ? "none" : "essential"),
+        ...(request.bookEditionId ? { book_edition_id: request.bookEditionId } : {}),
       }),
     });
     return await readCompletion(response);
