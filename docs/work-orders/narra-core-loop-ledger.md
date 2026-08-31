@@ -21,6 +21,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P2 | Дефолт врезок 4 стр., в work order 8 | fixed `6cfb68a0` |
 | P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | fixed `e5641fa2` |
 | P2 | Android `ReaderToolbar` = `null`, TTS только в overflow | fixed `e86678d2` |
+| P1 | `POST /v2/books/:id/scenes/at` 404/null, если в `book_analysis_runs` нет `normalized_text_*` | fixed `22162ae1` |
 
 ### Что починено (этот проход)
 
@@ -34,16 +35,19 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `6cfb68a0` P6: дефолт врезок 8 страниц
 - `e86678d2` P7: TTS на нижней панели Android
 - `e5641fa2` P8: ☰ содержание = TOC / закладки / поиск
+- `22162ae1` leftover P1: scenes/at без колонок `normalized_text_*`
 
 ### Что всплыло после более поздней фазы
 
-- Пока пусто: фазы P1–P8 этого прохода ещё не закрыты.
+- После backend P0: `scenes/at` всё ещё 404 без `normalized_text_*` у analysis run — fixed `22162ae1`.
 
 ### Что остаётся
 
 - P2 voice-rules уже на `main` (`e74f36af`): SoT + тесты 1/3 лицо, исчерпание пула, эпизодники, пасхалки не в авто. Этот проход не пересобирал.
 - Client P1–P8 в коде закрыты. Живой reader path на устройстве не проверен.
+- P5 matcher не переписывали: vitest 48/48 (Гермиону/Гермионы; «Малфой» при двух Малфоях — нет). Wiring `setCharacterNames` на месте.
 - Desktop FoliateViewer без scene slots / character tap / `/scenes/at` — leftover.
+- Prefetch / `ensureBookScenesThrough` по-прежнему не извлекает текст, если нет `normalized_text_*` (только on-demand `scenes/at`).
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
 - Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
 - Worker по-прежнему пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. `scenes/at` не ставит отдельную v3-разметку в очередь — v3 идёт своим analysis-пайплайном.
@@ -60,6 +64,14 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30 (повтор 2026-08-31).
 - Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
 - Leftover: пакетный scene backfill только v3; worker пишет v2; `scenes/at` не enqueue v3-analysis.
+
+## leftover P1 — scenes/at без normalized_text_* · 2026-08-31 · 22162ae1
+
+- `loadSceneContext` больше не возвращает null только из-за пустых `normalized_text_*`.
+- `sceneAt` берёт уже подготовленный текст или извлекает его из файла книги (`analysis/ondemand/...`), пишет ключи в job и заполняет пустой analysis run, если он есть.
+- Prefetch / пакетный backfill без этих колонок по-прежнему не греет слоты.
+- Проверки: gateway `node --test` book-p0-reader-path + book-catalog-service — 33/33.
+- Не проверено: живой `scenes/at` на postgres/S3; устройство.
 
 ## P8 — ☰ содержание TOC/закладки/поиск · 2026-08-31 · e5641fa2
 
