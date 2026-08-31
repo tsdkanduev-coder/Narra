@@ -13,7 +13,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | `loadSceneContext` требовал только `book-markup-v3` + publication `shadow` → `POST /v2/books/:id/scenes/at` 404 на v2 publish | fixed `a19a07ce` |
 | P0 | `ensureSceneSlot` переставлял failed `scene_image` только при priority ≥ 70; prefetch 45 оставлял слот мёртвым | fixed `a19a07ce` |
 | P0 | `charactersDue` отсекался по v3; `enqueueBookMarkupBackfill` не брал failed `book_markup` (Война и мир зависала в marking_up) | fixed `a19a07ce` |
-| P1 | На `main` ART_STYLE — semi-realistic anime, не канон work order | fixed this commit |
+| P1 | На `main` ART_STYLE — semi-realistic anime, не канон work order | fixed `9daea76f` |
 | P1 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | unmet until P3 |
 | P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
 | P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
@@ -22,7 +22,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 ### Что починено (этот проход)
 
 - `a19a07ce` backend P0-1/2/3 в `postgres-book-markup-repository.mjs` и `book-catalog-service.mjs`
-- client P1: канон `ART_STYLE` work order, бюджет 950, стиль не режется
+- `9daea76f` client P1: канон `ART_STYLE` work order, бюджет 950, стиль не режется
 
 ### Что всплыло после более поздней фазы
 
@@ -42,7 +42,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30.
 - Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
 
-## P1 — fanart-стиль генераций · 2026-08-31 · (этот коммит)
+## P1 — fanart-стиль генераций · 2026-08-31 · 9daea76f
 
 - `ART_STYLE` возвращён к канону work order (книжная иллюстрация, не anime).
 - `budgetPrompt` по-прежнему не режет стиль; юнит: портрет/сцена/обложка ≤ 950 со стилем целиком.
