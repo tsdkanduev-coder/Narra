@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useLayoutEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Platform, StyleSheet, View } from "react-native";
-import { ReaderTOCPanel } from "./ReaderTOCPanel";
+import { ReaderContentsPanel } from "./ReaderContentsPanel";
 import { ReaderTOCSheetCloseButton } from "./ReaderTOCSheetCloseButton";
 import { useReaderTOCSheet } from "./reader-toc-sheet-context";
 
@@ -28,7 +28,7 @@ export function ReaderTOCSheetScreen({ navigation }: Props) {
       contentStyle: { backgroundColor: colors.card },
       headerShown: true,
       headerBackVisible: false,
-      headerTitle: t("reader.toc", "Оглавление"),
+      headerTitle: t("reader.contents", "Содержание"),
       headerTitleAlign: "center",
       ...(Platform.OS === "ios"
         ? {
@@ -66,11 +66,7 @@ export function ReaderTOCSheetScreen({ navigation }: Props) {
 
   return (
     <View collapsable={false} style={[styles.container, { backgroundColor: colors.card }]}>
-      <ReaderTOCPanel
-        toc={session.toc}
-        currentChapter={session.currentChapter}
-        onSelectTocItem={session.onSelectTocItem}
-      />
+      <ReaderContentsPanel session={session} />
     </View>
   );
 }

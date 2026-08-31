@@ -8,7 +8,12 @@ import type { NativeContextMenuItem } from "@/components/ui/NativeContextMenuBut
 import { Text } from "@/components/ui/Typography";
 import { useBackendBook } from "@/hooks/use-backend-book";
 import { useReaderBridge } from "@/hooks/use-reader-bridge";
-import type { RelocateEvent, SelectionEvent, VisibleTTSSegment } from "@/hooks/use-reader-bridge";
+import type {
+  RelocateEvent,
+  ReaderSearchResultItem,
+  SelectionEvent,
+  VisibleTTSSegment,
+} from "@/hooks/use-reader-bridge";
 import { durationBucket } from "@/lib/analytics/contract";
 import { recordTelemetry } from "@/lib/analytics/telemetry";
 import {
@@ -185,6 +190,7 @@ import { CONTROLS_TIMEOUT, SCREEN_HEIGHT, SCREEN_WIDTH } from "./reader/reader-c
 import { makeStyles, noteTooltipMdStyles } from "./reader/reader-styles";
 import { useReaderTOCSheet } from "./reader/reader-toc-sheet-context";
 import { useReaderBookmark } from "./reader/useReaderBookmark";
+import { useReaderSearch } from "./reader/useReaderSearch";
 import { useReaderSystemInfo } from "./reader/useReaderSystemInfo";
 import { useReaderTTS } from "./reader/useReaderTTS";
 import { useVolumeButtonPaging } from "./reader/useVolumeButtonPaging";
@@ -539,6 +545,9 @@ function ReaderContent({ route, navigation }: Props) {
     pendingTTSContinueCallbackRef: React.RefObject<(() => void) | null>;
     pendingTTSContinueSafetyTimerRef: React.RefObject<ReturnType<typeof setTimeout> | null>;
   } | null>(null);
+  const searchCompleteRef = useRef<
+    ((count: number, results?: ReaderSearchResultItem[]) => void) | null
+  >(null);
 
   const bridgeRef = useRef<{
     requestPageSnippet: () => void;
@@ -1439,7 +1448,12 @@ function ReaderContent({ route, navigation }: Props) {
     onBookmarkSnippet: (text: string) => {
       bookmark.onBookmarkSnippet(text);
     },
+    onSearchComplete: (count, results) => {
+      searchCompleteRef.current?.(count, results);
+    },
   });
+  const readerSearch = useReaderSearch({ bridge });
+  searchCompleteRef.current = readerSearch.onSearchComplete;
 
   useEffect(() => {
     noteTooltipVisibleRef.current = !!noteTooltip;
@@ -1731,6 +1745,13 @@ function ReaderContent({ route, navigation }: Props) {
     },
     [closeTocSheet, goToHrefSafely],
   );
+  const goToContentsCfi = useCallback(
+    (cfi: string) => {
+      goToCFISafely(cfi);
+      closeTocSheet();
+    },
+    [closeTocSheet, goToCFISafely],
+  );
 
   const goBackToPreviousLocation = useCallback(() => {
     if (locationHistoryRef.current.length === 0) return;
@@ -1765,10 +1786,35 @@ function ReaderContent({ route, navigation }: Props) {
       bookId,
       toc,
       currentChapter,
+      bookmarks: bookmark.bookBookmarks,
+      search: {
+        query: readerSearch.searchQuery,
+        results: readerSearch.searchResults,
+        isSearching: readerSearch.isSearching,
+        timedOut: readerSearch.searchTimedOut,
+        onChangeQuery: readerSearch.handleSearchInput,
+        onSubmit: readerSearch.submitSearch,
+        onSelect: goToContentsCfi,
+      },
       onClose: closeTocSheet,
       onSelectTocItem: goToTocItem,
+      onSelectCfi: goToContentsCfi,
     }),
-    [bookId, closeTocSheet, currentChapter, goToTocItem, toc],
+    [
+      bookId,
+      bookmark.bookBookmarks,
+      closeTocSheet,
+      currentChapter,
+      goToContentsCfi,
+      goToTocItem,
+      readerSearch.handleSearchInput,
+      readerSearch.isSearching,
+      readerSearch.searchQuery,
+      readerSearch.searchResults,
+      readerSearch.searchTimedOut,
+      readerSearch.submitSearch,
+      toc,
+    ],
   );
 
   useEffect(() => {

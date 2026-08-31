@@ -1,13 +1,27 @@
-import type { TOCItem } from "@readany/core/types";
+import type { ReaderSearchResultItem } from "@/hooks/use-reader-bridge";
+import type { Bookmark, TOCItem } from "@readany/core/types";
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+
+export interface ReaderTOCSheetSearch {
+  query: string;
+  results: ReaderSearchResultItem[];
+  isSearching: boolean;
+  timedOut: boolean;
+  onChangeQuery: (query: string) => void;
+  onSubmit: () => void;
+  onSelect: (cfi: string) => void;
+}
 
 export interface ReaderTOCSheetSession {
   bookId: string;
   toc: TOCItem[];
   currentChapter: string;
+  bookmarks: Bookmark[];
+  search: ReaderTOCSheetSearch;
   onClose: () => void;
   onSelectTocItem: (href: string) => void;
+  onSelectCfi: (cfi: string) => void;
 }
 
 interface ReaderTOCSheetContextValue {
