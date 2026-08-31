@@ -748,6 +748,45 @@ export function createPostgresBookAnalysisRepository(pool, {
   }
 
   return {
+    async enqueueCatalogAnalysisBackfill({ limit = 100, priority = 40 } = {}) {
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
+        throw new RangeError('catalog analysis backfill limit must be between 1 and 10000')
+      }
+      const candidates = await pool.query(
+        `SELECT edition.id, edition.content_sha256
+         FROM book_editions AS edition
+         JOIN book_files AS file
+           ON file.book_edition_id = edition.id AND file.status = 'ready'
+         WHERE edition.scope = 'catalog'
+           AND edition.status IN ('marking_up', 'failed')
+           AND NOT EXISTS (
+             SELECT 1 FROM book_analysis_runs AS run
+             WHERE run.book_edition_id = edition.id
+               AND run.status IN ('queued', 'running', 'ready')
+           )
+         ORDER BY edition.created_at, edition.id
+         LIMIT $1`,
+        [limit]
+      )
+      const started = []
+      for (const row of candidates.rows) {
+        const ensured = await this.ensureAnalysisRun({
+          bookEditionId: row.id,
+          inputHash: row.content_sha256,
+          priority
+        })
+        if (ensured.run?.status === 'failed') {
+          started.push(await this.restartAnalysisRun({
+            bookEditionId: row.id,
+            priority
+          }))
+        } else {
+          started.push(ensured)
+        }
+      }
+      return started
+    },
+
     async getReadyAnalysisSource(bookEditionId) {
       const result = await pool.query(
         `SELECT edition.id, edition.scope, edition.catalog_key,

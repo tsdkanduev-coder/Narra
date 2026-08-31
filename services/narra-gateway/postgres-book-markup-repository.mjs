@@ -1929,7 +1929,8 @@ export function createPostgresBookMarkupRepository(pool, {
          FROM book_editions AS edition
          JOIN book_files AS file
            ON file.book_edition_id = edition.id AND file.status = 'ready'
-         WHERE NOT EXISTS (
+         WHERE edition.scope = 'private'
+           AND NOT EXISTS (
            SELECT 1 FROM book_markup_versions AS markup
            WHERE markup.book_edition_id = edition.id
              AND markup.status = 'published'

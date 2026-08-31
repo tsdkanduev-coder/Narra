@@ -3,6 +3,7 @@ import cors from 'cors'
 import { createHmac, randomUUID } from 'crypto'
 import path from 'node:path'
 import { httpsRequest } from './http.mjs'
+import { attachBookSearchContext } from './book-chat-grounding.mjs'
 import {
   parseAvatarBody,
   parseChatBody,
@@ -1154,6 +1155,13 @@ if (process.env.DATABASE_URL) {
     })
     console.info('[book-search] API enabled; books are enqueued only by explicit operator command')
   }
+  if (bookAnalysisRepository) {
+    const analysisBackfill = await bookAnalysisRepository.enqueueCatalogAnalysisBackfill()
+    console.info('[book-analysis] catalog marking_up backfill checked', {
+      books: analysisBackfill.length,
+      created: analysisBackfill.filter((item) => item.created).length
+    })
+  }
   if (internalGenerationService && BOOK_ANALYSIS_MEDIA_GENERATION_ENABLED) {
     const identityJobs = await bookMarkupRepository.enqueueMissingBookIdentities()
     const coverJobs = await bookMarkupRepository.enqueueMissingCatalogCovers()
@@ -1780,6 +1788,13 @@ app.post('/v2/ai/chat/complete', aiLimit, aiDailyLimit, express.json({ limit: '1
     recordActorAnalytics = input.analyticsTier !== 'none'
     requestPurpose = input.purpose
     requestId = input.requestId || randomUUID()
+    const groundedMessages = await attachBookSearchContext({
+      search: bookSearchService?.search?.bind(bookSearchService),
+      subjectId: req.installation?.sub,
+      bookEditionId: input.bookEditionId,
+      messages: input.messages,
+      purpose: input.purpose
+    })
     if (recordActorAnalytics) {
       await appendInternalEvent(req, 'ai_request_started', {
         request_id: requestId,
@@ -1789,6 +1804,7 @@ app.post('/v2/ai/chat/complete', aiLimit, aiDailyLimit, express.json({ limit: '1
     }
     const { response: r, provider, model, attempts, responseCost, finalizeAttempt } = await requestChat({
       ...input,
+      messages: groundedMessages,
       requestId,
       stream: false,
       onAttempt: recordActorAnalytics

@@ -1,3 +1,4 @@
+/** Legacy private-book worker only. Catalog publish is book-markup-v3 via analysis. */
 export const BOOK_MARKUP_ANALYSIS_VERSION = 'book-markup-v2'
 export const BOOK_MARKUP_SCHEMA_VERSION = 2
 export const CHARACTER_BUNDLE_VERSION = 'character-bundle-v1'

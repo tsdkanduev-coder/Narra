@@ -46,6 +46,45 @@ test('P0: enqueueBookMarkupBackfill resets failed book_markup to queued', async 
   assert.match(fn, /AND job\.status <> 'failed'/)
   assert.match(fn, /row\.status === 'failed'/)
   assert.match(fn, /SET status = 'queued'/)
+  assert.match(fn, /edition\.scope = 'private'/)
+})
+
+test('P0: catalog marking_up starts book-analysis, not legacy v2 markup jobs', async () => {
+  const markup = await readFile(
+    new URL('../postgres-book-markup-repository.mjs', import.meta.url),
+    'utf8'
+  )
+  const ingest = await readFile(
+    new URL('../catalog-ingest-service.mjs', import.meta.url),
+    'utf8'
+  )
+  const analysis = await readFile(
+    new URL('../book-analysis-repository.mjs', import.meta.url),
+    'utf8'
+  )
+  const gateway = await readFile(
+    new URL('../index.mjs', import.meta.url),
+    'utf8'
+  )
+  const backfill = markup.slice(
+    markup.indexOf('async enqueueBookMarkupBackfill'),
+    markup.indexOf('async enqueueBookIdentity')
+  )
+  const catalogBackfill = analysis.slice(
+    analysis.indexOf('async enqueueCatalogAnalysisBackfill'),
+    analysis.indexOf('async getReadyAnalysisSource')
+  )
+  assert.match(backfill, /edition\.scope = 'private'/)
+  assert.match(ingest, /ensureAnalysisRun/)
+  assert.doesNotMatch(ingest, /enqueueBookMarkup\(/)
+  assert.match(catalogBackfill, /edition\.scope = 'catalog'/)
+  assert.match(catalogBackfill, /edition\.status IN \('marking_up', 'failed'\)/)
+  assert.match(catalogBackfill, /restartAnalysisRun/)
+  assert.match(gateway, /enqueueCatalogAnalysisBackfill/)
+  assert.equal(
+    (await import('../book-markup.mjs')).BOOK_MARKUP_ANALYSIS_VERSION,
+    'book-markup-v2'
+  )
 })
 
 test('P0: catalog progress uses charactersDue without a v3 cutoff', async () => {
