@@ -15,11 +15,12 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | `charactersDue` отсекался по v3; `enqueueBookMarkupBackfill` не брал failed `book_markup` (Война и мир зависала в marking_up) | fixed `a19a07ce` |
 | P1 | На `main` ART_STYLE — semi-realistic anime, не канон work order | fixed `9daea76f` |
 | P0 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | fixed `3f3c192c` |
-| P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
+| P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | fixed `f09783b5` |
 | P1 | Канонический якорь сцены стирал inset на втором CFI той же sceneKey | fixed `c3443f80` |
 | P2 | `sceneInsertAnchors` читал только `book.scenes`, не `scenesByBackendId` | fixed `daee4273` |
-| P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
-| P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | unmet until P8 |
+| P2 | Дефолт врезок 4 стр., в work order 8 | fixed `6cfb68a0` |
+| P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | fixed `e5641fa2` |
+| P2 | Android `ReaderToolbar` = `null`, TTS только в overflow | fixed `e86678d2` |
 
 ### Что починено (этот проход)
 
@@ -29,6 +30,10 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `c3443f80` P1 scene anchors: биндинг и картинка на каждом тапнутом CFI той же sceneKey
 - `daee4273` P2: `sceneInsertAnchors` читает и `scenesByBackendId`
 - `caeb89c5` P1 refinement: тест persist/reload — тапнутый CFI не залипает на «Рисуем…»
+- `f09783b5` P4: полка «Читаю сейчас» + прогресс + page-curl
+- `6cfb68a0` P6: дефолт врезок 8 страниц
+- `e86678d2` P7: TTS на нижней панели Android
+- `e5641fa2` P8: ☰ содержание = TOC / закладки / поиск
 
 ### Что всплыло после более поздней фазы
 
@@ -36,7 +41,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 
 ### Что остаётся
 
-- Client P4–P8: см. статусы выше. Живой reader path (имена → карточка → чат, врезки, 4 таба) на устройстве не проверен. Таббар и scene-anchor починены в коде, симулятор не гонялся.
+- P2 voice-rules уже на `main` (`e74f36af`): SoT + тесты 1/3 лицо, исчерпание пула, эпизодники, пасхалки не в авто. Этот проход не пересобирал.
+- Client P1–P8 в коде закрыты. Живой reader path на устройстве не проверен.
 - Desktop FoliateViewer без scene slots / character tap / `/scenes/at` — leftover.
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
 - Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
@@ -54,6 +60,27 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30 (повтор 2026-08-31).
 - Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
 - Leftover: пакетный scene backfill только v3; worker пишет v2; `scenes/at` не enqueue v3-analysis.
+
+## P8 — ☰ содержание TOC/закладки/поиск · 2026-08-31 · e5641fa2
+
+- `ReaderContentsPanel`: вкладки Оглавление / Закладки / Поиск. Темы остаются на Aa.
+- `useReaderSearch` подключён к мосту WebView.
+- Проверки: contents-panel contract + tsc 0. Устройство не проверено.
+
+## P7 — Android TTS на панели ридера · 2026-08-31 · e86678d2
+
+- JS `ReaderToolbar`: Слушать / Персонажи. iOS native toolbar не менялся.
+- Проверки: toolbar contract 4/4, tsc 0.
+
+## P6 — дефолт врезок 8 · 2026-08-31 · 6cfb68a0
+
+- `DEFAULT_SCENE_SUGGESTION_INTERVAL = 8`. Matcher не пересобирался.
+- Сохранённый выбор 3/4/выкл остаётся. Проверки: scene-suggestion 23/23.
+
+## P4 — «Читаю сейчас» · 2026-08-31 · f09783b5
+
+- `ReadingNowShelf` в «Мои книги»: полоска + %, page-curl из токенов deslop.
+- Скрывается при теге/группе/выделении. Проверки: reading-now-books 1/1, tsc 0.
 
 ## P2 — restore врезок из scenesByBackendId · 2026-08-31 · daee4273
 
