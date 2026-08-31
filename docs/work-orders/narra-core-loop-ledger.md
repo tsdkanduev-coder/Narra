@@ -22,6 +22,9 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | fixed `e5641fa2` |
 | P2 | Android `ReaderToolbar` = `null`, TTS только в overflow | fixed `e86678d2` |
 | P1 | `POST /v2/books/:id/scenes/at` 404/null, если в `book_analysis_runs` нет `normalized_text_*` | fixed `22162ae1` |
+| P1 | `packages/app-expo/NARRA_GATEWAY.md` не перечислял scenes/at, progress, catalog, `/v2/speech/synthesize` | fixed `dbb9e7eb` |
+| P0 | «Мой путь» скрывал locked и private; тап по locked — no-op | fixed `2054fe69` |
+| P1 | gateway `scene-generation.mjs` без канона fanart (cinematic / empty genre) | fixed `e27322cc` |
 
 ### Что починено (этот проход)
 
@@ -36,10 +39,16 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `e86678d2` P7: TTS на нижней панели Android
 - `e5641fa2` P8: ☰ содержание = TOC / закладки / поиск
 - `22162ae1` leftover P1: scenes/at без колонок `normalized_text_*`
+- `dbb9e7eb` docs: NARRA_GATEWAY.md = реальные маршруты
+- `2054fe69` P0: «Мой путь» — locked grey+% и private
+- `e27322cc` P0: fanart-хвост в gateway scene prompt
 
 ### Что всплыло после более поздней фазы
 
 - После backend P0: `scenes/at` всё ещё 404 без `normalized_text_*` у analysis run — fixed `22162ae1`.
+- После P4: NARRA_GATEWAY.md был 39 строк без scenes/at — fixed `dbb9e7eb`.
+- После P4: «Мой путь» резал locked/private — fixed `2054fe69`.
+- После P4: scene prompt на gateway без fanart-канона — fixed `e27322cc`.
 
 ### Что остаётся
 
@@ -48,6 +57,10 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - P5 matcher не переписывали: vitest 48/48 (Гермиону/Гермионы; «Малфой» при двух Малфоях — нет). Wiring `setCharacterNames` на месте.
 - Desktop FoliateViewer без scene slots / character tap / `/scenes/at` — leftover.
 - Prefetch / `ensureBookScenesThrough` по-прежнему не извлекает текст, если нет `normalized_text_*` (только on-demand `scenes/at`).
+- Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. Catalog ingest уже зовёт `ensureAnalysisRun` (v3); константу v2 не переворачивали — старый markup-worker даёт v2 schema.
+- `POST /v2/ai/chat/complete` ещё не делает `GET /:bookEditionId/search` до LLM.
+- `narra-gateway-fetch.ts` дефолт всё ещё `api-test.narra.disrupt.builders`.
+- `/v2/media/images` (sceneJobRunner / client one-off) по-прежнему gigachat-image; `generateInternalScene` для scenes/at идёт через cover provider (gpt-image-2). Не меняли HTTP.
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
 - Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
 - Worker по-прежнему пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. `scenes/at` не ставит отдельную v3-разметку в очередь — v3 идёт своим analysis-пайплайном.
