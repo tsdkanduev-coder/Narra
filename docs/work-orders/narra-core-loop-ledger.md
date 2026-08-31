@@ -14,7 +14,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | `ensureSceneSlot` переставлял failed `scene_image` только при priority ≥ 70; prefetch 45 оставлял слот мёртвым | fixed `a19a07ce` |
 | P0 | `charactersDue` отсекался по v3; `enqueueBookMarkupBackfill` не брал failed `book_markup` (Война и мир зависала в marking_up) | fixed `a19a07ce` |
 | P1 | На `main` ART_STYLE — semi-realistic anime, не канон work order | fixed `9daea76f` |
-| P0 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | open until P3 ships |
+| P0 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | fixed `3f3c192c` |
 | P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
 | P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
 | P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | unmet until P8 |
@@ -23,6 +23,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 
 - `a19a07ce` backend P0-1/2/3 в `postgres-book-markup-repository.mjs` и `book-catalog-service.mjs`
 - `9daea76f` client P1: канон `ART_STYLE` work order, бюджет 950, стиль не режется
+- `3f3c192c` P3/P0 таббар: Библиотека / Читалка / Мой путь / Профиль; поиск в стеке Профиля
 
 ### Что всплыло после более поздней фазы
 
@@ -30,7 +31,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 
 ### Что остаётся
 
-- Client P1–P8: см. статусы выше. Живой reader path (имена → карточка → чат, врезки, 4 таба) на устройстве не проверен.
+- Client P4–P8: см. статусы выше. Живой reader path (имена → карточка → чат, врезки, 4 таба) на устройстве не проверен. Таббар подключён в коде, симулятор не гонялся.
 - Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
 
 ## P0 — backend reader path · 2026-08-31 · a19a07ce
