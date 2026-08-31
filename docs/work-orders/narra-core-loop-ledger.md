@@ -25,6 +25,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P1 | `packages/app-expo/NARRA_GATEWAY.md` не перечислял scenes/at, progress, catalog, `/v2/speech/synthesize` | fixed `dbb9e7eb` |
 | P0 | «Мой путь» скрывал locked и private; тап по locked — no-op | fixed `2054fe69` |
 | P1 | gateway `scene-generation.mjs` без канона fanart (cinematic / empty genre) | fixed `e27322cc` |
+| P0 | Catalog ingest / marking_up оставлял v2-константу; «Война и мир» без analysis-run | fixed `b3aefcbc` |
+| P0 | `POST /v2/ai/chat/complete` отвечал без `GET /:bookEditionId/search` | fixed `e0c24363` |
 
 ### Что починено (этот проход)
 
@@ -42,6 +44,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `dbb9e7eb` docs: NARRA_GATEWAY.md = реальные маршруты
 - `2054fe69` P0: «Мой путь» — locked grey+% и private
 - `e27322cc` P0: fanart-хвост в gateway scene prompt
+- `b3aefcbc` P0: catalog marking_up → book-analysis backfill; v2 только private
+- `e0c24363` P0: chat/complete ищет книгу до LLM
 
 ### Что всплыло после более поздней фазы
 
@@ -49,6 +53,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - После P4: NARRA_GATEWAY.md был 39 строк без scenes/at — fixed `dbb9e7eb`.
 - После P4: «Мой путь» резал locked/private — fixed `2054fe69`.
 - После P4: scene prompt на gateway без fanart-канона — fixed `e27322cc`.
+- После P4: catalog marking_up без analysis-run (Война и мир) — fixed `b3aefcbc`.
+- После P4: чат героя без поиска по книге — fixed `e0c24363`.
 
 ### Что остаётся
 
@@ -57,13 +63,13 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - P5 matcher не переписывали: vitest 48/48 (Гермиону/Гермионы; «Малфой» при двух Малфоях — нет). Wiring `setCharacterNames` на месте.
 - Desktop FoliateViewer без scene slots / character tap / `/scenes/at` — leftover.
 - Prefetch / `ensureBookScenesThrough` по-прежнему не извлекает текст, если нет `normalized_text_*` (только on-demand `scenes/at`).
-- Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. Catalog ingest уже зовёт `ensureAnalysisRun` (v3); константу v2 не переворачивали — старый markup-worker даёт v2 schema.
-- `POST /v2/ai/chat/complete` ещё не делает `GET /:bookEditionId/search` до LLM.
-- `narra-gateway-fetch.ts` дефолт всё ещё `api-test.narra.disrupt.builders`.
+- Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. Это legacy private-путь. Catalog ingest и startup-backfill зовут `ensureAnalysisRun` / `restartAnalysisRun` (v3). Константу v2 не переворачивали.
+- `narra-gateway-fetch.ts` и `eas.json` дефолт всё ещё `api-test.narra.disrupt.builders` (staging; `api.narra.disrupt.builders` — алиас). Хост без нового канона не меняли.
 - `/v2/media/images` (sceneJobRunner / client one-off) по-прежнему gigachat-image; `generateInternalScene` для scenes/at идёт через cover provider (gpt-image-2). Не меняли HTTP.
+- `generateBookScene` всё ещё передаёт пустые `genreId` / `chapter`; жанр тогда выводится из названия и отрывка, fanart-хвост уже канонический.
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
-- Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
-- Worker по-прежнему пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. `scenes/at` не ставит отдельную v3-разметку в очередь — v3 идёт своим analysis-пайплайном.
+- Документ `NARRA_GATEWAY.md` сверяет маршруты, формы запросов не переписывались. Речь: `POST /v2/speech/synthesize`.
+- `scenes/at` не ставит отдельную v3-разметку в очередь — v3 идёт своим analysis-пайплайном.
 - Пакетный `enqueueBookSceneBackfill` всё ещё выбирает только published `book-markup-v3`. On-demand `scenes/at` и prefetch этим фильтром не пользуются.
 - Без `analysisRepository` catalog-scope по-прежнему не греет `charactersDue` (как было в коде; канон «только catalog» коду не соответствует).
 - Postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL` не гонялись.
@@ -77,6 +83,23 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30 (повтор 2026-08-31).
 - Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
 - Leftover: пакетный scene backfill только v3; worker пишет v2; `scenes/at` не enqueue v3-analysis.
+
+## P0 — catalog analysis backfill · 2026-08-31 · b3aefcbc
+
+- `enqueueBookMarkupBackfill` только `scope = 'private'`.
+- `enqueueCatalogAnalysisBackfill`: catalog в `marking_up`/`failed` без queued/running/ready analysis → `ensureAnalysisRun`; failed-прогон → `restartAnalysisRun`.
+- Старт gateway вызывает backfill. `BOOK_MARKUP_ANALYSIS_VERSION` остаётся `book-markup-v2`.
+- Проверки: gateway `node --test` book-p0 + catalog-ingest + contracts + scene-generation + book-chat-grounding — 33/33 в том наборе; отдельно ingest 4/4.
+- Не проверено: живой postgres «Война и мир».
+
+## P0 — chat/complete grounded search · 2026-08-31 · e0c24363
+
+- Опциональный `book_edition_id` (UUID) на `POST /v2/ai/chat/complete`.
+- Gateway вызывает тот же поиск, что `GET /:bookEditionId/search`, до LLM. 404/409/`SEARCH_NOT_READY` не валят чат.
+- Клиент шлёт edition из backendBinding / library book. Memory-purpose без поиска.
+- HTTP-форма остальных полей не менялась. Stream-чат не грунтуем.
+- Проверки: book-chat-grounding 4/4, contracts (optional UUID), tsc app-expo 0.
+- Не проверено: живой индекс и устройство.
 
 ## leftover P1 — scenes/at без normalized_text_* · 2026-08-31 · 22162ae1
 
