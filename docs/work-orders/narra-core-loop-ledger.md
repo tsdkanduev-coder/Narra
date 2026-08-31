@@ -17,7 +17,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | fixed `3f3c192c` |
 | P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
 | P1 | Канонический якорь сцены стирал inset на втором CFI той же sceneKey | fixed `c3443f80` |
-| P2 | `sceneInsertAnchors` читал только `book.scenes`, не `scenesByBackendId` | open until cheap restore ships |
+| P2 | `sceneInsertAnchors` читал только `book.scenes`, не `scenesByBackendId` | fixed `daee4273` |
 | P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
 | P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | unmet until P8 |
 
@@ -27,6 +27,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `9daea76f` client P1: канон `ART_STYLE` work order, бюджет 950, стиль не режется
 - `3f3c192c` P3/P0 таббар: Библиотека / Читалка / Мой путь / Профиль; поиск в стеке Профиля
 - `c3443f80` P1 scene anchors: биндинг и картинка на каждом тапнутом CFI той же sceneKey
+- `daee4273` P2: `sceneInsertAnchors` читает и `scenesByBackendId`
 
 ### Что всплыло после более поздней фазы
 
@@ -52,6 +53,12 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30 (повтор 2026-08-31).
 - Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
 - Leftover: пакетный scene backfill только v3; worker пишет v2; `scenes/at` не enqueue v3-analysis.
+
+## P2 — restore врезок из scenesByBackendId · 2026-08-31 · daee4273
+
+- `sceneInsertAnchors` принимает `scenesByBackendId`; ReaderScreen передаёт его вместе с bindings.
+- Не трогали: desktop FoliateViewer, интервал 4 vs 8, matcher имён, iOS TTS.
+- Проверки: vitest scene-inserts + backend-scene-* 19/19, tsc 0.
 
 ## P1 — якоря сцен на каждом CFI · 2026-08-31 · c3443f80
 
