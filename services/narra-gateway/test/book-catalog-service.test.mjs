@@ -516,6 +516,46 @@ test('catalog progress never queues legacy v2 character bundles', async () => {
   assert.deepEqual(result.warmup, { requested: 0, ready: 0, pending: 0, failed: 0 })
 })
 
+test('progress with analysis repository queues charactersDue without a v3 cutoff', async () => {
+  const ensured = []
+  const service = createBookCatalogService({
+    repository: repository({
+      async advanceReaderPosition() {
+        return {
+          scope: 'private',
+          analysisVersion: 'book-markup-v2',
+          readerTextOffset: 90,
+          readingFraction: 0.09,
+          chapterKey: 'chapter-2',
+          charactersDue: [{
+            characterKey: 'character:hero',
+            warmupTextOffset: 80,
+            firstAppearanceTextOffset: 120
+          }]
+        }
+      },
+      async ensureCharacterBundle(input) {
+        ensured.push(input)
+        return { status: 'queued' }
+      }
+    }),
+    analysisRepository: {
+      async ensureLatestMediaProjection() { return { projected: true } }
+    }
+  })
+
+  const result = await service.advanceProgress('reader-1', 'book-1', {
+    progressFraction: 0.09,
+    textOffset: null,
+    chapterKey: 'chapter-2'
+  })
+
+  assert.equal(ensured.length, 1)
+  assert.equal(ensured[0].characterKey, 'character:hero')
+  assert.equal(ensured[0].bundleVersion, 'character-bundle-v3')
+  assert.deepEqual(result.warmup, { requested: 1, ready: 0, pending: 1, failed: 0 })
+})
+
 test('canonical v3 progress queues media for characters behind the warmup frontier', async () => {
   const ensured = []
   const service = createBookCatalogService({

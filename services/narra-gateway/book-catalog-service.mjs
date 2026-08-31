@@ -8,7 +8,6 @@ import {
 } from './book-markup.mjs'
 import {
   BOOK_ANALYSIS_CHARACTER_BUNDLE_VERSION,
-  BOOK_ANALYSIS_MARKUP_VERSION,
   normalizeBookMarkupV3
 } from './book-analysis-contracts.mjs'
 import {
@@ -823,9 +822,7 @@ export function createBookCatalogService({
       if (!progress) throw serviceError('NOT_FOUND', 'Книга не найдена', 404)
 
       const charactersDue = analysisRepository
-        ? progress.analysisVersion === BOOK_ANALYSIS_MARKUP_VERSION
-          ? progress.charactersDue
-          : []
+        ? progress.charactersDue
         : progress.scope === 'catalog' ? [] : progress.charactersDue
       const requests = await Promise.allSettled(charactersDue.map((character) =>
         ensureCharacterBundle(store, {

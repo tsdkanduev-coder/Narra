@@ -2,6 +2,45 @@
 
 Формат: фаза · дата · коммит · что сделано · проверки · открытые вопросы.
 
+## Кампания 2026-08-31 — ветка `cursor/core-loop-uiux-3230` (от `main`)
+
+Work order P1–P8 + обязательные backend P0 (реализация, не rewrite контракта).
+
+### Bug ledger
+
+| Pri | Issue | Status |
+|---|---|---|
+| P0 | `loadSceneContext` требовал только `book-markup-v3` + publication `shadow` → `POST /v2/books/:id/scenes/at` 404 на v2 publish | fixed in this PR |
+| P0 | `ensureSceneSlot` переставлял failed `scene_image` только при priority ≥ 70; prefetch 45 оставлял слот мёртвым | fixed in this PR |
+| P0 | `charactersDue` отсекался по v3; `enqueueBookMarkupBackfill` не брал failed `book_markup` (Война и мир зависала в marking_up) | fixed in this PR |
+| P1 | На `main` ART_STYLE — semi-realistic anime, не канон work order | in progress (client P1, uncommitted) |
+| P1 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | unmet until P3 |
+| P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
+| P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
+| P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | unmet until P8 |
+
+### Что починено (этот проход)
+
+- (ожидает коммит) backend P0-1/2/3 в `postgres-book-markup-repository.mjs` и `book-catalog-service.mjs`
+
+### Что всплыло после более поздней фазы
+
+- Пока пусто: фазы P1–P8 этого прохода ещё не закрыты.
+
+### Что остаётся
+
+- Client P1–P8: см. статусы выше. Живой reader path (имена → карточка → чат, врезки, 4 таба) на устройстве не проверен.
+- Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
+
+## P0 — backend reader path · 2026-08-31 · (этот коммит)
+
+- `loadSceneContext`: любая published-разметка; publication не только shadow; текст из любого analysis run книги.
+- `ensureSceneSlot`: requeue failed `scene_image` при priority ≥ 45 (prefetch и scenes/at).
+- `book-catalog-service`: `charactersDue` без отсечки v3.
+- `enqueueBookMarkupBackfill`: кандидаты с failed `book_markup`; reset в `queued`.
+- Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30.
+- Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
+
 ## P1 — fanart-стиль генераций · 2026-08-05 · f7591e76
 
 - Новый `src/lib/narra/art-style.ts`: канон `ART_STYLE` из narra (фанарт, книжная

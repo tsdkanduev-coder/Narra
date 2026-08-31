@@ -251,7 +251,8 @@ export function createPostgresBookMarkupRepository(pool, {
     const result = await client.query(
       `SELECT edition.id, edition.scope, edition.title, edition.author,
               edition.expires_at, markup.id AS markup_version_id,
-              markup.text_length, markup.input_hash,
+              COALESCE(markup.text_length, run.text_length) AS text_length,
+              markup.input_hash,
               publication.content_hash AS publication_content_hash,
               publication.data->'markup'->'scenePolicy' AS scene_policy,
               run.normalized_text_object_key, run.normalized_text_hash
@@ -259,16 +260,31 @@ export function createPostgresBookMarkupRepository(pool, {
        JOIN book_markup_versions AS markup
          ON markup.book_edition_id = edition.id
         AND markup.status = 'published'
-        AND markup.analysis_version = 'book-markup-v3'
        LEFT JOIN LATERAL (
          SELECT value.content_hash, value.run_id, value.data
          FROM book_analysis_publications AS value
-         WHERE value.book_edition_id = edition.id AND value.channel = 'shadow'
-           AND value.content_hash = markup.input_hash
-         ORDER BY value.published_at DESC, value.id DESC
+         WHERE value.book_edition_id = edition.id
+         ORDER BY
+           CASE WHEN value.content_hash = markup.input_hash THEN 0 ELSE 1 END,
+           CASE WHEN value.channel = 'shadow' THEN 0 ELSE 1 END,
+           value.published_at DESC, value.id DESC
          LIMIT 1
        ) AS publication ON true
-       LEFT JOIN book_analysis_runs AS run ON run.id = publication.run_id
+       LEFT JOIN LATERAL (
+         SELECT candidate.normalized_text_object_key,
+                candidate.normalized_text_hash,
+                candidate.text_length
+         FROM book_analysis_runs AS candidate
+         WHERE candidate.book_edition_id = edition.id
+           AND candidate.normalized_text_object_key IS NOT NULL
+           AND candidate.normalized_text_hash IS NOT NULL
+         ORDER BY
+           CASE WHEN publication.run_id IS NOT NULL
+                 AND candidate.id = publication.run_id THEN 0 ELSE 1 END,
+           candidate.run_sequence DESC NULLS LAST,
+           candidate.created_at DESC
+         LIMIT 1
+       ) AS run ON true
        WHERE edition.id = $1 AND (
          $2::uuid IS NULL OR
          (edition.scope = 'catalog' AND edition.status IN ('base_ready', 'published')) OR
@@ -281,6 +297,7 @@ export function createPostgresBookMarkupRepository(pool, {
     const row = result.rows[0]
     if (!row || !row.normalized_text_object_key || !row.normalized_text_hash) return null
     const textLength = Number(row.text_length)
+    if (!Number.isSafeInteger(textLength) || textLength < 1) return null
     return {
       bookEditionId: row.id,
       scope: row.scope,
@@ -331,7 +348,7 @@ export function createPostgresBookMarkupRepository(pool, {
       [idempotencyKey]
     )).rows[0]
     if (!job) throw new Error('idempotent scene generation job disappeared')
-    if (job.status === 'failed' && priority >= 70) {
+    if (job.status === 'failed' && priority >= 45) {
       await client.query(
         `UPDATE generation_jobs
          SET status = 'queued', attempts = 0, last_error_code = NULL,
@@ -1827,6 +1844,7 @@ export function createPostgresBookMarkupRepository(pool, {
            WHERE job.book_edition_id = edition.id
              AND job.job_type = 'book_markup'
              AND job.target_version = $1
+             AND job.status <> 'failed'
          )
          ORDER BY edition.created_at, edition.id
          LIMIT $2`,
@@ -1842,7 +1860,20 @@ export function createPostgresBookMarkupRepository(pool, {
           targetVersion: analysisVersion,
           priority
         })
-        jobs.push({ ...jobRow(ensured.row), created: ensured.created, idempotencyKey })
+        let row = ensured.row
+        if (row.status === 'failed') {
+          const reset = await pool.query(
+            `UPDATE generation_jobs
+             SET status = 'queued', attempts = 0, last_error_code = NULL,
+                 available_at = now(), locked_at = NULL, locked_by = NULL,
+                 lease_token = NULL, updated_at = now()
+             WHERE id = $1 AND status = 'failed'
+             RETURNING *`,
+            [row.id]
+          )
+          row = reset.rows[0] || row
+        }
+        jobs.push({ ...jobRow(row), created: ensured.created, idempotencyKey })
       }
       return jobs
     },
