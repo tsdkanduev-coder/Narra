@@ -18,8 +18,64 @@ import {
   encodeBookContentCursor,
   utf8CharacterChunk
 } from './book-content.mjs'
+import { extractStructuredBookText } from './book-source-text.mjs'
 import { voiceForGender } from './voices.mjs'
 import { createHash, randomUUID } from 'node:crypto'
+
+const MAX_BOOK_SOURCE_BYTES = 512 * 1024 * 1024
+
+function sha256Hex(value) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+async function resolveNormalizedSceneText({ store, storage }, { subjectId, bookEditionId }) {
+  if (typeof store.getNormalizedSceneText === 'function') {
+    const existing = await store.getNormalizedSceneText({ subjectId, bookEditionId })
+    if (existing?.objectKey && existing?.contentHash) return existing
+  }
+  if (!storage || typeof storage.getBytes !== 'function' || typeof storage.putBytes !== 'function') {
+    return null
+  }
+  if (typeof store.getAccessibleBookFile !== 'function') return null
+  const file = await store.getAccessibleBookFile({ subjectId, bookEditionId })
+  if (!file) return null
+  const stored = await storage.getBytes({
+    objectKey: file.objectKey,
+    maxBytes: MAX_BOOK_SOURCE_BYTES
+  })
+  if (file.contentHash && sha256Hex(stored.bytes) !== file.contentHash) {
+    throw serviceError('BOOK_INTEGRITY', 'Файл книги не совпадает с сохранённой контрольной суммой', 409)
+  }
+  let extracted
+  try {
+    extracted = await extractStructuredBookText({
+      bytes: stored.bytes,
+      format: file.format,
+      mimeType: file.mimeType
+    })
+  } catch {
+    return null
+  }
+  const objectKey = `analysis/ondemand/${bookEditionId}/normalized-text-v1.txt`
+  const contentHash = sha256Hex(extracted.text)
+  const uploaded = await storage.putBytes({
+    objectKey,
+    bytes: Buffer.from(extracted.text, 'utf8'),
+    mimeType: 'text/plain'
+  })
+  if (uploaded?.contentHash && uploaded.contentHash !== contentHash) {
+    throw serviceError('BOOK_INTEGRITY', 'Нормализованный текст не прошёл проверку хранилища', 409)
+  }
+  if (typeof store.saveNormalizedSceneText === 'function') {
+    await store.saveNormalizedSceneText({
+      bookEditionId,
+      objectKey,
+      contentHash,
+      textLength: extracted.textLength
+    })
+  }
+  return { objectKey, contentHash, textLength: extracted.textLength }
+}
 
 function serviceError(code, message, status) {
   return Object.assign(new Error(message), { code, status })
@@ -733,11 +789,21 @@ export function createBookCatalogService({
       if (typeof analysisRepository?.ensureLatestMediaProjection === 'function') {
         await analysisRepository.ensureLatestMediaProjection(bookEditionId)
       }
+      const textRef = await resolveNormalizedSceneText({ store, storage }, {
+        subjectId,
+        bookEditionId
+      })
       const scene = await store.ensureReaderBookScene({
         subjectId,
         bookEditionId,
         readerTextOffset,
-        progressFraction
+        progressFraction,
+        ...(textRef
+          ? {
+              normalizedTextObjectKey: textRef.objectKey,
+              normalizedTextHash: textRef.contentHash
+            }
+          : {})
       })
       if (!scene) throw serviceError('NOT_FOUND', 'Книга или сцена не найдена', 404)
       const result = {

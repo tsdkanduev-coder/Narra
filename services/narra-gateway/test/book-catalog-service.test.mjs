@@ -674,6 +674,115 @@ test('scene lookup returns a signed ready asset and never accepts scene text fro
   assert.equal(calls[1][0], 'sign')
 })
 
+test('sceneAt fills normalized text from the book file when analysis columns are empty', async () => {
+  const sourceText = 'Анна открыла дверь и вошла в зал.'
+  const sourceBytes = Buffer.from(sourceText, 'utf8')
+  const sourceHash = createHash('sha256').update(sourceBytes).digest('hex')
+  const textHash = createHash('sha256').update(sourceText).digest('hex')
+  const calls = []
+  const service = createBookCatalogService({
+    repository: repository({
+      async getNormalizedSceneText() { return null },
+      async getAccessibleBookFile() {
+        return {
+          objectKey: 'books/private/book-1/source.txt',
+          mimeType: 'text/plain',
+          byteSize: sourceBytes.byteLength,
+          contentHash: sourceHash,
+          format: 'txt'
+        }
+      },
+      async saveNormalizedSceneText(input) {
+        calls.push(['save', input])
+        return { runId: 'run-1' }
+      },
+      async ensureReaderBookScene(input) {
+        calls.push(['resolve', input])
+        return {
+          status: 'queued',
+          sceneKey: 'text-interval-v1:0',
+          slotIndex: 0,
+          anchorTextOffset: 0
+        }
+      }
+    }),
+    storage: {
+      async getBytes({ objectKey }) {
+        calls.push(['get', objectKey])
+        return { bytes: sourceBytes }
+      },
+      async putBytes(input) {
+        calls.push(['put', input.objectKey])
+        return {
+          objectKey: input.objectKey,
+          contentHash: createHash('sha256').update(input.bytes).digest('hex')
+        }
+      },
+      async createDownload() {
+        throw new Error('must not sign a queued scene')
+      }
+    }
+  })
+
+  const result = await service.sceneAt('reader-1', 'book-1', {
+    readerTextOffset: 10,
+    progressFraction: null
+  })
+  assert.equal(result.status, 'queued')
+  assert.deepEqual(calls.find(([name]) => name === 'resolve')?.[1], {
+    subjectId: 'reader-1',
+    bookEditionId: 'book-1',
+    readerTextOffset: 10,
+    progressFraction: null,
+    normalizedTextObjectKey: 'analysis/ondemand/book-1/normalized-text-v1.txt',
+    normalizedTextHash: textHash
+  })
+  assert.deepEqual(calls.find(([name]) => name === 'save')?.[1], {
+    bookEditionId: 'book-1',
+    objectKey: 'analysis/ondemand/book-1/normalized-text-v1.txt',
+    contentHash: textHash,
+    textLength: sourceText.length
+  })
+})
+
+test('sceneAt reuses prepared normalized text and does not re-extract the book file', async () => {
+  const calls = []
+  const service = createBookCatalogService({
+    repository: repository({
+      async getNormalizedSceneText() {
+        return {
+          objectKey: 'analysis/run-2/normalized-text-v1.txt',
+          contentHash: HASH
+        }
+      },
+      async getAccessibleBookFile() {
+        throw new Error('must not open the source file')
+      },
+      async ensureReaderBookScene(input) {
+        calls.push(input)
+        return {
+          status: 'queued',
+          sceneKey: 'text-interval-v1:0',
+          slotIndex: 0,
+          anchorTextOffset: 0
+        }
+      }
+    }),
+    storage: {
+      async getBytes() { throw new Error('must not download') },
+      async putBytes() { throw new Error('must not upload') }
+    }
+  })
+
+  const result = await service.sceneAt('reader-1', 'book-1', {
+    readerTextOffset: 10,
+    progressFraction: null
+  })
+  assert.equal(result.status, 'queued')
+  assert.equal(calls[0].normalizedTextObjectKey, 'analysis/run-2/normalized-text-v1.txt')
+  assert.equal(calls[0].normalizedTextHash, HASH)
+})
+
 test('local hash reuses a ready catalog edition and otherwise requests local registration', async () => {
   const catalog = { ...EDITION, id: 'catalog-1', scope: 'catalog', catalogKey: 'book' }
   const service = createBookCatalogService({

@@ -295,7 +295,7 @@ export function createPostgresBookMarkupRepository(pool, {
       [bookEditionId, subjectId]
     )
     const row = result.rows[0]
-    if (!row || !row.normalized_text_object_key || !row.normalized_text_hash) return null
+    if (!row) return null
     const textLength = Number(row.text_length)
     if (!Number.isSafeInteger(textLength) || textLength < 1) return null
     return {
@@ -305,11 +305,20 @@ export function createPostgresBookMarkupRepository(pool, {
       author: row.author,
       markupVersionId: row.markup_version_id,
       markupContentHash: row.publication_content_hash || row.input_hash,
-      normalizedTextObjectKey: row.normalized_text_object_key,
-      normalizedTextHash: row.normalized_text_hash,
+      normalizedTextObjectKey: row.normalized_text_object_key || null,
+      normalizedTextHash: row.normalized_text_hash || null,
       textLength,
       policy: normalizeBookScenePolicy(row.scene_policy, textLength)
     }
+  }
+
+  function withNormalizedText(context, override = {}) {
+    const normalizedTextObjectKey =
+      context.normalizedTextObjectKey || override.normalizedTextObjectKey || null
+    const normalizedTextHash =
+      context.normalizedTextHash || override.normalizedTextHash || null
+    if (!normalizedTextObjectKey || !normalizedTextHash) return null
+    return { ...context, normalizedTextObjectKey, normalizedTextHash }
   }
 
   async function ensureSceneSlot(client, context, slot, priority = 45) {
@@ -1285,15 +1294,101 @@ export function createPostgresBookMarkupRepository(pool, {
       })
     },
 
+    async getNormalizedSceneText({ subjectId = null, bookEditionId }) {
+      const result = await pool.query(
+        `SELECT candidate.normalized_text_object_key, candidate.normalized_text_hash
+         FROM book_analysis_runs AS candidate
+         JOIN book_editions AS edition ON edition.id = candidate.book_edition_id
+         WHERE candidate.book_edition_id = $1
+           AND candidate.normalized_text_object_key IS NOT NULL
+           AND candidate.normalized_text_hash IS NOT NULL
+           AND (
+             $2::uuid IS NULL OR
+             (edition.scope = 'catalog' AND edition.status IN ('base_ready', 'published')) OR
+             (edition.scope = 'private' AND edition.owner_subject_id = $2::uuid
+               AND edition.expires_at > now())
+           )
+         ORDER BY candidate.run_sequence DESC NULLS LAST, candidate.created_at DESC
+         LIMIT 1`,
+        [bookEditionId, subjectId]
+      )
+      const row = result.rows[0]
+      if (!row) return null
+      return {
+        objectKey: row.normalized_text_object_key,
+        contentHash: row.normalized_text_hash
+      }
+    },
+
+    async getAccessibleBookFile({ subjectId = null, bookEditionId }) {
+      const result = await pool.query(
+        `SELECT file.object_key, file.mime_type, file.byte_size, file.content_hash,
+                edition.format
+         FROM book_editions AS edition
+         JOIN book_files AS file ON file.book_edition_id = edition.id AND file.status = 'ready'
+         WHERE edition.id = $1 AND (
+           $2::uuid IS NULL OR
+           (edition.scope = 'catalog' AND edition.status IN ('base_ready', 'published')) OR
+           (edition.scope = 'private' AND edition.owner_subject_id = $2::uuid
+             AND edition.expires_at > now())
+         )
+         LIMIT 1`,
+        [bookEditionId, subjectId]
+      )
+      const row = result.rows[0]
+      if (!row) return null
+      return {
+        objectKey: row.object_key,
+        mimeType: row.mime_type,
+        byteSize: Number(row.byte_size),
+        contentHash: row.content_hash,
+        format: row.format
+      }
+    },
+
+    async saveNormalizedSceneText({
+      bookEditionId,
+      objectKey,
+      contentHash,
+      textLength
+    }) {
+      if (!objectKey || !contentHash) return null
+      if (!Number.isSafeInteger(textLength) || textLength < 1) return null
+      const result = await pool.query(
+        `UPDATE book_analysis_runs
+         SET normalized_text_object_key = $2,
+             normalized_text_hash = $3,
+             text_length = $4,
+             sections = COALESCE(sections, '[]'::jsonb),
+             updated_at = now()
+         WHERE id = (
+           SELECT id FROM book_analysis_runs
+           WHERE book_edition_id = $1
+             AND normalized_text_object_key IS NULL
+             AND normalized_text_hash IS NULL
+           ORDER BY run_sequence DESC NULLS LAST, created_at DESC
+           LIMIT 1
+         )
+         RETURNING id`,
+        [bookEditionId, objectKey, contentHash, textLength]
+      )
+      return result.rows[0] ? { runId: result.rows[0].id } : null
+    },
+
     async ensureReaderBookScene({
       subjectId,
       bookEditionId,
       readerTextOffset = null,
       progressFraction = null,
-      priority = 70
+      priority = 70,
+      normalizedTextObjectKey = null,
+      normalizedTextHash = null
     }) {
       return transaction(pool, async (client) => {
-        const context = await loadSceneContext(client, { subjectId, bookEditionId })
+        const loaded = await loadSceneContext(client, { subjectId, bookEditionId })
+        const context = loaded
+          ? withNormalizedText(loaded, { normalizedTextObjectKey, normalizedTextHash })
+          : null
         if (!context) return null
         const canonicalOffset = progressFraction != null
           ? Math.round(context.textLength * Math.min(1, Math.max(0, progressFraction)))
@@ -1316,7 +1411,8 @@ export function createPostgresBookMarkupRepository(pool, {
       priority = 45
     }) {
       return transaction(pool, async (client) => {
-        const context = await loadSceneContext(client, { subjectId, bookEditionId })
+        const loaded = await loadSceneContext(client, { subjectId, bookEditionId })
+        const context = loaded ? withNormalizedText(loaded) : null
         if (!context) return { requested: 0, ready: 0, pending: 0, failed: 0 }
         const frontier = bookMediaFrontier({
           scope: context.scope,
@@ -2095,10 +2191,11 @@ export function createPostgresBookMarkupRepository(pool, {
       const results = []
       for (const candidate of candidates.rows) {
         const result = await transaction(pool, async (client) => {
-          const context = await loadSceneContext(client, {
+          const loaded = await loadSceneContext(client, {
             subjectId: null,
             bookEditionId: candidate.id
           })
+          const context = loaded ? withNormalizedText(loaded) : null
           if (!context) return { requested: 0, ready: 0, pending: 0, failed: 0 }
           const frontier = bookMediaFrontier({
             scope: context.scope,
