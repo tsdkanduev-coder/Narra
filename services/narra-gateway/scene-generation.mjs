@@ -5,6 +5,17 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 /** Both providers in the existing scene pipeline accept at least this many characters. */
 export const SCENE_PROVIDER_PROMPT_LIMIT = 950
 
+/** Канон work order. В конец каждого scene-промпта, никогда не сокращается. */
+export const SCENE_FANART_STYLE =
+  'фанарт, стилизованная современная книжная иллюстрация, цифровая живопись с выразительными ' +
+  'мазками, НЕ фотореализм, чистые уверенные формы, мягкий рассеянный свет, сдержанная ' +
+  'благородная палитра, лёгкая текстура бумаги, единая серия работ одного художника, ' +
+  'без текста и надписей'
+
+function fanartStyleTail() {
+  return `Стиль: ${SCENE_FANART_STYLE}.`
+}
+
 /** Scene-specific art direction ported from the main mobile prompt. */
 export const SCENE_ART_DIRECTIONS = {
   classic:
@@ -213,37 +224,40 @@ function assemblePrompt(values, limits) {
     previous
       ? `КОНТЕКСТ СЕРИИ: ${previous} Тот же художник, палитра и манера.`
       : '',
-    'Один момент и пространство, не коллаж. Строго без текста, букв, цифр, надписей, логотипов и водяных знаков.'
+    'Один момент и пространство, не коллаж.'
   ].filter(Boolean).join('\n\n')
 }
 
 /**
- * Keeps the main five-block scene policy while fitting the strictest provider
- * in the existing GigaChat -> Kandinsky pipeline. Important trailing rules are
- * preserved instead of being silently removed by a provider-level slice.
+ * Keeps the main scene policy while fitting the provider budget. The fanart
+ * tail is reserved first and never clipped; excerpt, passports and genre
+ * direction shrink instead.
  */
 export function sceneGenerationPrompt(input) {
   const values = promptValues(input)
+  const style = fanartStyleTail()
+  const bodyLimit = Math.max(80, SCENE_PROVIDER_PROMPT_LIMIT - style.length - 2)
   const limits = Object.fromEntries(
     Object.entries(values).map(([key, value]) => [key, value.length])
   )
   const minimums = {
-    previous: values.previous ? 40 : 0,
-    excerpt: 80,
-    canon: values.canon ? 60 : 0,
-    book: 40,
-    artDirection: 60,
-    genreLabel: 18
+    previous: values.previous ? 24 : 0,
+    excerpt: 48,
+    canon: values.canon ? 36 : 0,
+    book: 24,
+    artDirection: 24,
+    genreLabel: 12
   }
-  let prompt = assemblePrompt(values, limits)
+  let body = assemblePrompt(values, limits)
   for (const key of ['previous', 'excerpt', 'canon', 'book', 'artDirection', 'genreLabel']) {
-    if (prompt.length <= SCENE_PROVIDER_PROMPT_LIMIT) break
+    if (body.length <= bodyLimit) break
     const available = Math.max(0, limits[key] - minimums[key])
-    const reduction = Math.min(available, prompt.length - SCENE_PROVIDER_PROMPT_LIMIT + 1)
+    const reduction = Math.min(available, body.length - bodyLimit + 1)
     limits[key] -= reduction
-    prompt = assemblePrompt(values, limits)
+    body = assemblePrompt(values, limits)
   }
-  if (prompt.length > SCENE_PROVIDER_PROMPT_LIMIT) {
+  const prompt = `${body}\n\n${style}`
+  if (prompt.length > SCENE_PROVIDER_PROMPT_LIMIT || !prompt.endsWith(style)) {
     throw new Error('scene prompt policy exceeds the provider-safe budget')
   }
   return prompt
