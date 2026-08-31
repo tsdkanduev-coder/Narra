@@ -28,6 +28,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `3f3c192c` P3/P0 таббар: Библиотека / Читалка / Мой путь / Профиль; поиск в стеке Профиля
 - `c3443f80` P1 scene anchors: биндинг и картинка на каждом тапнутом CFI той же sceneKey
 - `daee4273` P2: `sceneInsertAnchors` читает и `scenesByBackendId`
+- `caeb89c5` P1 refinement: тест persist/reload — тапнутый CFI не залипает на «Рисуем…»
 
 ### Что всплыло после более поздней фазы
 
