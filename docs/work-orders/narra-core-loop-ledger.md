@@ -16,7 +16,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P1 | На `main` ART_STYLE — semi-realistic anime, не канон work order | fixed `9daea76f` |
 | P0 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | fixed `3f3c192c` |
 | P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
-| P1 | Канонический якорь сцены стирал inset на втором CFI той же sceneKey | open until scene-anchor ships |
+| P1 | Канонический якорь сцены стирал inset на втором CFI той же sceneKey | fixed `c3443f80` |
 | P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
 | P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | unmet until P8 |
 
@@ -25,6 +25,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `a19a07ce` backend P0-1/2/3 в `postgres-book-markup-repository.mjs` и `book-catalog-service.mjs`
 - `9daea76f` client P1: канон `ART_STYLE` work order, бюджет 950, стиль не режется
 - `3f3c192c` P3/P0 таббар: Библиотека / Читалка / Мой путь / Профиль; поиск в стеке Профиля
+- `c3443f80` P1 scene anchors: биндинг и картинка на каждом тапнутом CFI той же sceneKey
 
 ### Что всплыло после более поздней фазы
 
@@ -32,7 +33,9 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 
 ### Что остаётся
 
-- Client P4–P8: см. статусы выше. Живой reader path (имена → карточка → чат, врезки, 4 таба) на устройстве не проверен. Таббар подключён в коде, симулятор не гонялся.
+- Client P4–P8: см. статусы выше. Живой reader path (имена → карточка → чат, врезки, 4 таба) на устройстве не проверен. Таббар и scene-anchor починены в коде, симулятор не гонялся.
+- Desktop FoliateViewer без scene slots / character tap / `/scenes/at` — leftover.
+- Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
 - Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
 
 ## P0 — backend reader path · 2026-08-31 · a19a07ce
@@ -43,6 +46,14 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `enqueueBookMarkupBackfill`: кандидаты с failed `book_markup`; reset в `queued`.
 - Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30.
 - Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
+
+## P1 — якоря сцен на каждом CFI · 2026-08-31 · c3443f80
+
+- `withBackendSceneIntent` больше не стирает `sceneAnchorBindings` у неканонического CFI той же `sceneKey`.
+- `generateBackendReaderScene` не снимает живой слот; `display`/`replaceSceneSlot` на тапнутый CFI и на канонический, если он в DOM.
+- Проверки: vitest backend-scene-reader + backend-scene-state + scene-inserts 18/18, tsc app-expo 0.
+- Не проверено: живой reader (два слота одной сцены на устройстве).
+- Не трогали: desktop FoliateViewer, интервал врезок 4 vs 8, Android ReaderToolbar.
 
 ## P3 — таббар 4 таба · 2026-08-31 · 3f3c192c
 
