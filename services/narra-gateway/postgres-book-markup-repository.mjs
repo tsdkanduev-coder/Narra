@@ -2498,6 +2498,29 @@ export function createPostgresBookMarkupRepository(pool, {
       )
       if (!result.rows[0]) throw leaseLost(job.id)
       const row = result.rows[0]
+      const genres = await pool.query(
+        `SELECT genre FROM book_edition_genres
+         WHERE book_edition_id = $1
+         ORDER BY position`,
+        [job.bookEditionId]
+      )
+      const bookSubjects = genres.rows.map((item) => item.genre).filter(Boolean)
+      const chapter = await pool.query(
+        `SELECT segment->>'title' AS title
+         FROM book_analysis_runs AS run
+         CROSS JOIN LATERAL jsonb_array_elements(
+           COALESCE(run.content_navigation->'segments', '[]'::jsonb)
+         ) AS segment
+         WHERE run.book_edition_id = $1
+           AND run.content_navigation IS NOT NULL
+           AND COALESCE((segment->>'startOffset')::int, -1) <= $2
+           AND COALESCE((segment->>'endOffset')::int, -1) > $2
+           AND COALESCE(segment->>'title', '') <> ''
+         ORDER BY run.run_sequence DESC, run.created_at DESC,
+           (segment->>'startOffset')::int DESC
+         LIMIT 1`,
+        [job.bookEditionId, Number(row.anchor_text_offset)]
+      )
       const characters = await pool.query(
         `SELECT character_key, name, full_name, data
          FROM book_characters
@@ -2512,6 +2535,9 @@ export function createPostgresBookMarkupRepository(pool, {
         scope: row.scope,
         bookTitle: row.title,
         bookAuthor: row.author,
+        genreId: bookSubjects[0] || '',
+        chapter: chapter.rows[0]?.title || '',
+        bookSubjects,
         sceneKey: row.scene_key,
         slotIndex: Number(row.slot_index),
         anchorTextOffset: Number(row.anchor_text_offset),

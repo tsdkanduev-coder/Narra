@@ -143,3 +143,21 @@ test('scene jobs reject raw provider controls and malformed ids', () => {
     previous_excerpts: []
   }), /UUID v4/)
 })
+
+test('edition genre and chapter replace the empty cinematic fallback', () => {
+  const prompt = sceneGenerationPrompt({
+    bookTitle: 'Война и мир',
+    bookAuthor: 'Толстой',
+    bookDescription: '',
+    bookSubjects: ['historical-fiction'],
+    genreId: 'historical-fiction',
+    chapter: 'Пьер в салоне',
+    excerpt: 'Пьер вошёл в гостиную и остановился у двери.',
+    characters: [],
+    previousExcerpts: []
+  })
+  assert.match(prompt, /историческая проза/)
+  assert.match(prompt, /Пьер в салоне/)
+  assert.ok(prompt.includes(SCENE_FANART_STYLE))
+  assert.doesNotMatch(prompt, /кинематографичн/i)
+})

@@ -444,7 +444,8 @@ function normalizeBookSceneRequest(input) {
     'idempotencyKey', 'bookEditionId', 'targetVersion', 'scope',
     'bookTitle', 'bookAuthor', 'sceneKey', 'slotIndex', 'anchorTextOffset',
     'excerptStartTextOffset', 'excerptEndTextOffset', 'textLength',
-    'normalizedTextObjectKey', 'normalizedTextHash', 'characters'
+    'normalizedTextObjectKey', 'normalizedTextHash', 'characters',
+    'genreId', 'chapter', 'bookSubjects', 'bookDescription'
   ]))
   const bookEditionId = identifier(body.bookEditionId, 'bookEditionId')
   const targetVersion = identifier(body.targetVersion, 'targetVersion')
@@ -480,6 +481,18 @@ function normalizeBookSceneRequest(input) {
     sceneKey,
     bookTitle: requiredString(body.bookTitle, 'bookTitle', 1_000),
     bookAuthor: typeof body.bookAuthor === 'string' ? body.bookAuthor.trim().slice(0, 1_000) : '',
+    genreId: typeof body.genreId === 'string' ? body.genreId.trim().slice(0, 80) : '',
+    chapter: typeof body.chapter === 'string' ? body.chapter.trim().slice(0, 500) : '',
+    bookSubjects: Array.isArray(body.bookSubjects)
+      ? body.bookSubjects
+        .filter((item) => typeof item === 'string')
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .slice(0, 32)
+      : [],
+    bookDescription: typeof body.bookDescription === 'string'
+      ? body.bookDescription.trim().slice(0, 4_000)
+      : '',
     normalizedTextObjectKey: requiredString(
       body.normalizedTextObjectKey,
       'normalizedTextObjectKey',
@@ -2498,10 +2511,10 @@ export function createInternalGenerationService({
         const prompt = sceneGenerationPrompt({
           bookTitle: input.bookTitle,
           bookAuthor: input.bookAuthor,
-          bookDescription: '',
-          bookSubjects: [],
-          genreId: '',
-          chapter: '',
+          bookDescription: input.bookDescription,
+          bookSubjects: input.bookSubjects,
+          genreId: input.genreId,
+          chapter: input.chapter,
           excerpt,
           characters: input.characters.map(sceneCharacter).filter(({ name }) => name),
           previousExcerpts: []

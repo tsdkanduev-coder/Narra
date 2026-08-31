@@ -87,6 +87,31 @@ test('P0: catalog marking_up starts book-analysis, not legacy v2 markup jobs', a
   )
 })
 
+test('P0: getBookSceneInput supplies catalog genre and chapter to generateBookScene', async () => {
+  const markup = await readFile(
+    new URL('../postgres-book-markup-repository.mjs', import.meta.url),
+    'utf8'
+  )
+  const generator = await readFile(
+    new URL('../internal-generation-service.mjs', import.meta.url),
+    'utf8'
+  )
+  const input = markup.slice(
+    markup.indexOf('async getBookSceneInput'),
+    markup.indexOf('async getCatalogCoverInput')
+  )
+  const scene = generator.slice(
+    generator.indexOf('async generateBookScene'),
+    generator.indexOf('async generateCharacterBundle')
+  )
+  assert.match(input, /FROM book_edition_genres/)
+  assert.match(input, /content_navigation->'segments'/)
+  assert.match(input, /genreId: bookSubjects\[0\]/)
+  assert.match(scene, /genreId: input\.genreId/)
+  assert.match(scene, /chapter: input\.chapter/)
+  assert.doesNotMatch(scene, /genreId: ''/)
+})
+
 test('P0: catalog progress uses charactersDue without a v3 cutoff', async () => {
   const source = await readFile(
     new URL('../book-catalog-service.mjs', import.meta.url),
