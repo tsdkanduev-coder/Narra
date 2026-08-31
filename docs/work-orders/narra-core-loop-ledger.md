@@ -37,6 +37,10 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Desktop FoliateViewer без scene slots / character tap / `/scenes/at` — leftover.
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
 - Контракт `NARRA_GATEWAY.md` не менялся. Речь: `POST /v2/speech/synthesize`.
+- Worker по-прежнему пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. `scenes/at` не ставит отдельную v3-разметку в очередь — v3 идёт своим analysis-пайплайном.
+- Пакетный `enqueueBookSceneBackfill` всё ещё выбирает только published `book-markup-v3`. On-demand `scenes/at` и prefetch этим фильтром не пользуются.
+- Без `analysisRepository` catalog-scope по-прежнему не греет `charactersDue` (как было в коде; канон «только catalog» коду не соответствует).
+- Postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL` не гонялись.
 
 ## P0 — backend reader path · 2026-08-31 · a19a07ce
 
@@ -44,8 +48,9 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `ensureSceneSlot`: requeue failed `scene_image` при priority ≥ 45 (prefetch и scenes/at).
 - `book-catalog-service`: `charactersDue` без отсечки v3.
 - `enqueueBookMarkupBackfill`: кандидаты с failed `book_markup`; reset в `queued`.
-- Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30.
+- Проверки: `node --test` book-p0-reader-path + book-catalog-service — 30/30 (повтор 2026-08-31).
 - Не проверено: postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL`.
+- Leftover: пакетный scene backfill только v3; worker пишет v2; `scenes/at` не enqueue v3-analysis.
 
 ## P1 — якоря сцен на каждом CFI · 2026-08-31 · c3443f80
 
