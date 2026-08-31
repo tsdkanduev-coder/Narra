@@ -14,7 +14,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | `ensureSceneSlot` переставлял failed `scene_image` только при priority ≥ 70; prefetch 45 оставлял слот мёртвым | fixed `a19a07ce` |
 | P0 | `charactersDue` отсекался по v3; `enqueueBookMarkupBackfill` не брал failed `book_markup` (Война и мир зависала в marking_up) | fixed `a19a07ce` |
 | P1 | На `main` ART_STYLE — semi-realistic anime, не канон work order | fixed `9daea76f` |
-| P1 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | unmet until P3 |
+| P0 | Таббар Library / Chats / Search / Profile вместо Library / Reader / My path / Profile | open until P3 ships |
 | P1 | «Читаю сейчас» и page-curl не подключены в LibraryScreen | unmet until P4 |
 | P2 | Дефолт врезок 4 стр., в work order 8 | unmet until P6 |
 | P2 | Единая ☰-панель TOC/закладки/поиск не собрана; `useReaderSearch` не подключён | unmet until P8 |

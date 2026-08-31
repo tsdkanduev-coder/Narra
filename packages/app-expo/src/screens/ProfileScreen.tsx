@@ -424,13 +424,15 @@ export function ProfileScreen() {
             action: () => nav.navigate("ProfileNotes"),
           },
           {
+            icon: { name: "text.magnifyingglass", fallback: "search" },
+            label: t("tabs.search", "Поиск"),
+            action: () => nav.navigate("ProfileSearch"),
+          },
+          {
             icon: { name: "icloud", fallback: "cloud" },
             label: t("settings.sync", "同步"),
             route: "SyncSettings" as const,
           },
-          // TODO(P3): «Поиск по книгам» — готового поиска библиотеки в мобильном
-          // приложении нет (LibraryScreen ищет только оригинальный файл книги);
-          // добавить пункт, когда появится полноценный поиск по библиотеке.
         ],
       },
       {
