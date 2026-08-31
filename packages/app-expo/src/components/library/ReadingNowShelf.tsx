@@ -4,9 +4,16 @@ import { generatedCoverTextTone } from "@/lib/book/cover-text-contrast";
 import { loadingCoverColorForTitleAuthor } from "@/lib/book/loading-cover-placeholder";
 import { findBundledCatalogBookByTitle } from "@/lib/catalog/bundled-books";
 import { useResolvedCovers } from "@/screens/notes/useResolvedCovers";
-import { type ThemeColors, fontWeight, radius, spacing, useColors } from "@/styles/theme";
+import {
+  type ThemeColors,
+  fontWeight,
+  headingFontFamily,
+  radius,
+  spacing,
+  useColors,
+} from "@/styles/theme";
+import { radiusPixels, spacingPixels } from "@deslop/primitives";
 import type { Book } from "@readany/core/types";
-import { BlurView } from "expo-blur";
 /**
  * ReadingNowShelf — секция «Читаю сейчас» в библиотеке: нативный горизонтальный
  * ряд книг, отсортированных по lastOpenedAt.
@@ -14,6 +21,7 @@ import { BlurView } from "expo-blur";
 import { memo, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { BookCardActionSheet } from "./BookCardActionSheet";
 import { BookCoverTypography } from "./book-cover-typography";
 import { BookSpineOverlay } from "./book-spine-overlay";
@@ -62,6 +70,9 @@ export const ReadingNowShelf = memo(function ReadingNowShelf({
 
   return (
     <View style={s.section}>
+      <Text style={s.title} accessibilityRole="header">
+        {t("library.readingNow", "Читаю сейчас")}
+      </Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -95,10 +106,20 @@ export const ReadingNowShelf = memo(function ReadingNowShelf({
               <PerspectiveBook
                 width={CARD_WIDTH}
                 height={COVER_HEIGHT}
-                coverEffects={false}
+                coverEffects
                 onPress={() => onOpen(book)}
-                accessibilityLabel={book.meta.title}
+                accessibilityLabel={t("library.readingProgress", "Прочитано {{percent}}%", {
+                  percent: progressPercent,
+                })}
                 accessibilityHint={t("notes.openBook", "Открыть книгу")}
+                footer={
+                  <View style={s.progressBlock}>
+                    <View style={s.progressTrack}>
+                      <View style={[s.progressFill, { width: `${progressPercent}%` }]} />
+                    </View>
+                    <Text style={s.progressLabel}>{`${progressPercent}%`}</Text>
+                  </View>
+                }
                 cover={
                   <View style={s.coverCanvas}>
                     {hasUsableCover && coverUri ? (
@@ -144,17 +165,8 @@ export const ReadingNowShelf = memo(function ReadingNowShelf({
                       showText={showCoverTypography}
                       textTone={coverTextTone}
                       coverUri={(hasUsableCover ? coverUri : bundledCoverUri) ?? undefined}
-                      bottomAccessory={
-                        progressPercent > 0 ? (
-                          <BlurView tint="dark" intensity={50} style={s.progressChip}>
-                            <Text style={s.cardProgress} numberOfLines={1}>
-                              {`${progressPercent}%`}
-                            </Text>
-                            <View pointerEvents="none" style={s.progressChipBorder} />
-                          </BlurView>
-                        ) : null
-                      }
                     />
+                    <PageCurlCorner />
                   </View>
                 }
               />
@@ -166,9 +178,64 @@ export const ReadingNowShelf = memo(function ReadingNowShelf({
   );
 });
 
+/** MVP page-curl: повёрнутый градиент + тень из токенов deslop, без новой дизайн-системы. */
+const PageCurlCorner = memo(function PageCurlCorner() {
+  const size = spacingPixels[24];
+  return (
+    <View pointerEvents="none" style={curlStyles.wrap}>
+      <View
+        style={[
+          curlStyles.shadow,
+          {
+            width: size,
+            height: size,
+            borderBottomRightRadius: radiusPixels[8],
+          },
+        ]}
+      />
+      <LinearGradient
+        colors={["rgba(255,255,255,0.72)", "rgba(0,0,0,0.22)"]}
+        start={{ x: 0, y: 1 }}
+        end={{ x: 1, y: 0 }}
+        style={[curlStyles.fold, { width: size, height: size }]}
+      />
+    </View>
+  );
+});
+
+const curlStyles = StyleSheet.create({
+  wrap: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    width: spacingPixels[24],
+    height: spacingPixels[24],
+    overflow: "hidden",
+  },
+  shadow: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  fold: {
+    position: "absolute",
+    right: -spacingPixels[12],
+    bottom: -spacingPixels[12],
+    transform: [{ rotate: "45deg" }],
+  },
+});
+
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
     section: { marginBottom: spacing.xxl },
+    title: {
+      fontFamily: headingFontFamily,
+      fontSize: 20,
+      fontWeight: fontWeight.semibold,
+      color: colors.foreground,
+      marginBottom: spacing.md,
+    },
     carousel: { overflow: "visible" },
     row: { gap: spacing.lg },
     coverCanvas: {
@@ -184,26 +251,25 @@ const makeStyles = (colors: ThemeColors) =>
       padding: spacing.md,
       backgroundColor: colors.bookCoverSurface,
     },
-    progressChip: {
-      paddingHorizontal: 10,
-      paddingVertical: 4,
+    progressBlock: {
+      marginTop: spacing.sm,
+      gap: spacingPixels[4],
+    },
+    progressTrack: {
+      height: 4,
+      backgroundColor: colors.muted,
       borderRadius: radius.full,
       overflow: "hidden",
-      backgroundColor: "rgba(0,0,0,0.5)",
     },
-    progressChipBorder: {
-      ...StyleSheet.absoluteFill,
-      borderWidth: 1,
-      borderColor: "rgba(255,255,255,0.5)",
+    progressFill: {
+      height: 4,
+      backgroundColor: colors.primary,
       borderRadius: radius.full,
     },
-    cardProgress: {
+    progressLabel: {
       fontSize: 13,
-      fontWeight: fontWeight.semibold,
-      lineHeight: 18,
-      flexShrink: 0,
-      color: "rgba(255,255,255,0.92)",
-      textAlign: "left",
+      fontWeight: fontWeight.medium,
+      color: colors.mutedForeground,
       fontVariant: ["tabular-nums"],
     },
   });

@@ -2,6 +2,8 @@ import { BookCard } from "@/components/library/BookCard";
 import { CatalogBookSkeleton } from "@/components/library/CatalogBookSkeleton";
 import { ConnectedCatalogBookCard } from "@/components/library/ConnectedCatalogBookCard";
 import { GroupCard } from "@/components/library/GroupCard";
+import { ReadingNowShelf } from "@/components/library/ReadingNowShelf";
+import { selectReadingNowBooks } from "@/lib/library/reading-now-books";
 import { GroupPickerSheet } from "@/components/library/GroupPickerSheet";
 import { ImportSourceMenuButton } from "@/components/library/ImportSourceMenuButton";
 import { type ExtractorRef, ExtractorWebView } from "@/components/rag/ExtractorWebView";
@@ -485,6 +487,10 @@ function LibraryScreenContent() {
 
   const showCatalog = !activeTag && !activeGroupId && !selectionMode;
   const isMyBooksEmptyState = showCatalog && librarySection === "my-books" && isLoaded && !hasBooks;
+  const readingNowBooks = useMemo(
+    () => (showCatalog ? selectReadingNowBooks(books) : []),
+    [books, showCatalog],
+  );
 
   const handleOpen = useCallback(
     async (book: Book) => {
@@ -1176,7 +1182,22 @@ function LibraryScreenContent() {
       }}
     >
       <View>{isLoaded ? catalogGrid : null}</View>
-      <View>{isLoaded ? (hasBooks ? renderLibraryGrid(gridItems) : emptyLibraryState) : null}</View>
+      <View>
+        {isLoaded ? (
+          <>
+            {readingNowBooks.length > 0 ? (
+              <ReadingNowShelf
+                books={readingNowBooks}
+                edgeInset={0}
+                catalogCardWidth={gridItemWidth}
+                onDelete={removeBook}
+                onOpen={handleOpen}
+              />
+            ) : null}
+            {hasBooks ? renderLibraryGrid(gridItems) : emptyLibraryState}
+          </>
+        ) : null}
+      </View>
     </NativeSegmentedPager>
   );
 
