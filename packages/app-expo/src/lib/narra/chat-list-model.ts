@@ -80,13 +80,14 @@ export function createChatListSelector() {
         const previousRows = new Map(entry.rows.map((row) => [row.character.id, row]));
         const rows: ChatListRow[] = [];
         for (const character of characters) {
-          if (!character.backendManaged || !isCharacterUnlocked(progress, character)) continue;
+          const unlocked = isCharacterUnlocked(progress, character);
           const messageCount = chats[character.id]?.length ?? 0;
           const row = previousRows.get(character.id);
           rows.push(
             row &&
               row.bookTitle === title &&
               row.character === character &&
+              row.unlocked === unlocked &&
               row.messageCount === messageCount &&
               row.fromBundledCatalog === fromBundledCatalog
               ? row
@@ -94,12 +95,13 @@ export function createChatListSelector() {
                   bookId: book.id,
                   bookTitle: title,
                   character,
-                  unlocked: true,
+                  unlocked,
                   messageCount,
                   fromBundledCatalog,
                 },
           );
         }
+        rows.sort((left, right) => Number(right.unlocked) - Number(left.unlocked));
         entry.rows = retainItems(entry.rows, rows);
         entry.characters = characters;
         entry.chats = chats;
