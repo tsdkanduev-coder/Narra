@@ -110,6 +110,19 @@ test('TTS markup runs as an independently scalable hardened container', () => {
 test('book scenes use the configured image route and landscape aspect ratio', () => {
   assert.match(gatewaySource, /generateScene: generateInternalScene/)
   assert.match(gatewaySource, /aspectRatio: '4:3'/)
+  const sceneJobs = gatewaySource.slice(
+    gatewaySource.indexOf('const sceneJobRunner'),
+    gatewaySource.indexOf('sceneJobRunner.start()')
+  )
+  assert.match(sceneJobs, /generateInternalScene/)
+  assert.doesNotMatch(sceneJobs, /generateInternalPortrait/)
+  const images = gatewaySource.slice(
+    gatewaySource.indexOf("app.post('/v2/media/images'"),
+    gatewaySource.indexOf('function coverJobPollAfter')
+  )
+  assert.match(images, /requestCoverImageWithFallback/)
+  assert.doesNotMatch(images, /gigachatImage/)
+  assert.doesNotMatch(images, /kandinskyQueued/)
 })
 
 test('shadow analysis workers keep the hardened read-only runtime', () => {
