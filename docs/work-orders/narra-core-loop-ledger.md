@@ -28,6 +28,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | `generateBookScene` слал пустые genre/chapter | fixed `570ebc01` |
 | P0 | Catalog ingest / marking_up оставлял v2-константу; «Война и мир» без analysis-run | fixed `b3aefcbc` |
 | P0 | `POST /v2/ai/chat/complete` отвечал без `GET /:bookEditionId/search` | fixed `e0c24363` |
+| P1 | `narra-gateway-fetch.ts` зашивал `api-test.narra.disrupt.builders` | fixed `d97f9192` |
+| P1 | sceneJobRunner и `/v2/media/images` слали сцены/обложки в gigachat-image | fixed `9665e023` |
 
 ### Что починено (этот проход)
 
@@ -48,6 +50,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `b3aefcbc` P0: catalog marking_up → book-analysis backfill; v2 только private
 - `e0c24363` P0: chat/complete ищет книгу до LLM
 - `570ebc01` P0: generateBookScene берёт жанр издания и главу
+- `d97f9192` P1: fallback Gateway — `api.narra.disrupt.builders`, не api-test
+- `9665e023` P1: сцены/обложки через gpt-image-2, не GigaChat Image
 
 ### Что всплыло после более поздней фазы
 
@@ -58,17 +62,19 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - После P4: catalog marking_up без analysis-run (Война и мир) — fixed `b3aefcbc`.
 - После P4: чат героя без поиска по книге — fixed `e0c24363`.
 - После fanart-хвоста: generateBookScene всё ещё слал пустые genre/chapter — fixed `570ebc01`.
+- После P1 leftover: fetch зашивал api-test — fixed `d97f9192`.
+- После P1 leftover: sceneJobRunner / `/v2/media/images` шли в GigaChat — fixed `9665e023`.
 
 ### Что остаётся
 
-- P2 voice-rules уже на `main` (`e74f36af`): SoT + тесты 1/3 лицо, исчерпание пула, эпизодники, пасхалки не в авто. Этот проход не пересобирал.
-- Client P1–P8 в коде закрыты. Живой reader path на устройстве не проверен.
-- P5 matcher не переписывали: vitest 48/48 (Гермиону/Гермионы; «Малфой» при двух Малфоях — нет). Wiring `setCharacterNames` на месте.
+- P2 `voice-rules.ts` уже есть (`e74f36af` на `main`): SoT + тесты. Этот проход файл не пересобирал.
+- Устройство / симулятор не проверены. Живая «Война и мир» на postgres не гонялась.
 - Desktop FoliateViewer без scene slots / character tap / `/scenes/at` — leftover.
+- P5 matcher не переписывали: vitest 48/48. Wiring `setCharacterNames` на месте.
 - Prefetch / `ensureBookScenesThrough` по-прежнему не извлекает текст, если нет `normalized_text_*` (только on-demand `scenes/at`).
-- Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'`. Это legacy private-путь. Catalog ingest и startup-backfill зовут `ensureAnalysisRun` / `restartAnalysisRun` (v3). Константу v2 не переворачивали.
-- `narra-gateway-fetch.ts` и `eas.json` дефолт всё ещё `api-test.narra.disrupt.builders` (staging; `api.narra.disrupt.builders` — алиас). Хост без нового канона не меняли.
-- `/v2/media/images` (sceneJobRunner / client one-off) по-прежнему gigachat-image; `generateInternalScene` для scenes/at идёт через cover provider (gpt-image-2). Не меняли HTTP.
+- Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'` только для private. Catalog — v3 analysis.
+- `eas.json` по-прежнему задаёт `EXPO_PUBLIC_NARRA_GATEWAY_URL=api-test` для EAS-профилей. Fallback в коде — production.
+- `generateInternalScene` и `/v2/media/images` для сцен/обложек идут в gpt-image-2. HTTP не меняли.
 - `generateBookScene` берёт жанр из `book_edition_genres` и главу из `content_navigation`; если главы нет — поле пустое, жанр тогда из названия.
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
 - Документ `NARRA_GATEWAY.md` сверяет маршруты, формы запросов не переписывались. Речь: `POST /v2/speech/synthesize`.
@@ -110,6 +116,14 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `generateBookScene` передаёт их в `sceneGenerationPrompt`. Публичный HTTP не менялся.
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
+
+## leftover P1 — production host и gpt-image-2 · 2026-08-31 · d97f9192, 9665e023
+
+- `narra-gateway-fetch.ts`: fallback `https://api.narra.disrupt.builders`. Env по-прежнему перекрывает.
+- sceneJobRunner и `POST /v2/media/images` не вызывают GigaChat Image для сцен/обложек.
+- `voice-rules.ts` уже в репозитории — не добавляли второй файл.
+- Проверки: vitest narra-gateway-fetch 23/23; compose + book-p0 18/18.
+- Не проверено: устройство, живая «Война и мир», десктопный Foliate.
 
 ## leftover P1 — scenes/at без normalized_text_* · 2026-08-31 · 22162ae1
 
