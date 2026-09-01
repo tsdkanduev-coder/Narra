@@ -180,7 +180,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - UI показывает `SEARCH_NOT_READY` тостом. Повтор — та же кнопка.
 - `previousExcerpts=[]` не трогали. `generateInternalScene` по-прежнему gpt-image-2, не GigaChat Image.
 - Проверки: gateway book-chat-grounding 5/5; vitest errors + chat-ui + narra-chat 10/10; tsc app-expo 0; biome по изменённым файлам чисто.
-- Не проверено: устройство / живой индекс «Война и мир». Stream grounding — см. `7f88466e`.
+- Не проверено: устройство / живой индекс «Война и мир». Stream grounding — `7f88466e`. Анализ героев — `f82ba52d`.
 
 ## leftover P1 — host/README + gpt-image-2 + поиск · 2026-09-01 · 3d44fc1d, 9665e023, f9ce77ae
 
