@@ -1,6 +1,7 @@
 {
   "reader": {
     "processStopped": "Читалка остановилась. Нажмите «Повторить»",
+    "externalLinkBlocked": "Ссылка ведёт за пределы книги",
     "untitled": "Без названия",
     "loadingBook": "Загрузка книги…",
     "failedToLoad": "Не удалось загрузить книгу",

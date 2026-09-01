@@ -80,6 +80,8 @@ export interface ReaderBridgeCallbacks {
   onSelection?: (detail: SelectionEvent) => void;
   onSelectionCleared?: () => void;
   onTap?: () => void;
+  /** Внешняя ссылка из книги: WebView её не открывает, решает RN. */
+  onExternalLink?: (href: string) => void;
   onSearchResult?: (index: number, count: number) => void;
   onSearchComplete?: (count: number, results?: ReaderSearchResultItem[]) => void;
   onError?: (message: string, detail: { loadId?: string }) => void;
@@ -880,6 +882,9 @@ export function useReaderBridge(callbacks: ReaderBridgeCallbacks) {
           break;
         case "tap":
           cb.onTap?.();
+          break;
+        case "externalLink":
+          cb.onExternalLink?.(typeof msg.href === "string" ? msg.href : "");
           break;
         case "searchResult":
           cb.onSearchResult?.(msg.index || 0, msg.count || 0);

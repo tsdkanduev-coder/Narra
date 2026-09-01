@@ -43,6 +43,7 @@ import type { NarraCharacter } from "@/lib/narra/types";
 import { toast } from "@/lib/notifications";
 import { DEFAULT_READER_FONT_FAMILY } from "@/lib/reader/bundled-reader-font";
 import { getReaderBookmarkCopy } from "@/lib/reader/reader-bookmark-copy";
+import { externalLinkHost, isReaderHostedUrl } from "@/lib/reader/reader-links";
 import { isReaderTransportError } from "@/lib/reader/reader-recovery";
 import {
   READER_BUILD_ID,
@@ -1067,6 +1068,19 @@ function ReaderContent({ route, navigation }: Props) {
     };
   }, [READER_BUILD_ID, readerHtmlUri]);
 
+  // Внешние ссылки книги: подсказка вместо ухода из ридера.
+  const lastExternalLinkNoticeRef = useRef(0);
+  const showExternalLinkNotice = useCallback(
+    (href: string) => {
+      if (Date.now() - lastExternalLinkNoticeRef.current < 1500) return;
+      lastExternalLinkNoticeRef.current = Date.now();
+      toast.info(t("reader.externalLinkBlocked", "Ссылка ведёт за пределы книги"), {
+        description: externalLinkHost(href) || undefined,
+      });
+    },
+    [t],
+  );
+
   // Controls toggle — declared before bridge so onTap can reference it without TS error
   const toggleControls = useCallback(() => {
     const willShow = !showControls;
@@ -1361,6 +1375,10 @@ function ReaderContent({ route, navigation }: Props) {
     onSelectionCleared: () => {
       setSelection(null);
       readingContextService.clearSelection();
+    },
+    onExternalLink: (href) => {
+      recordDiagnostic("reader_external_link");
+      showExternalLinkNotice(href);
     },
     onTap: () => {
       recordDiagnostic("reader_tap");
@@ -2425,6 +2443,13 @@ function ReaderContent({ route, navigation }: Props) {
               scrollEnabled={false}
               showsVerticalScrollIndicator={false}
               originWhitelist={["*"]}
+              // Страховка от навигации WebView за пределы книги: внешние http(s)
+              // ссылки из EPUB не открываются в ридере (C5-RC2).
+              onShouldStartLoadWithRequest={(request) => {
+                if (isReaderHostedUrl(request.url) || request.isTopFrame === false) return true;
+                showExternalLinkNotice(request.url);
+                return false;
+              }}
               mixedContentMode="always"
             />
           </View>

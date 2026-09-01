@@ -1,6 +1,7 @@
 {
   "reader": {
     "processStopped": "The reader stopped. Tap Retry",
+    "externalLinkBlocked": "This link leads outside the book",
     "untitled": "Untitled",
     "loadingBook": "Opening book…",
     "failedToLoad": "Couldn't open the book",

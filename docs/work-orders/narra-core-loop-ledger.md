@@ -335,3 +335,9 @@
 - Живой факт: у «Евгения Онегина» на staging в списке героев был «Рассказчик». `character-display-name.mjs`: `isPseudoCharacterName` (рассказчик/нарратор/повествователь/автор, narrator/author/storyteller; именованный рассказчик с полным именем сохраняется). `book-catalog-service.mjs` фильтрует таких в обоих ветках `v3Manifest` (preview и ready).
 - Не сделано из P0-5: именительная форма `canonicalName` на резолвере (C4-RC4) и экспорт `aliases` в публичный профиль (C4-RC3).
 - Тесты: `test/character-display-name.test.mjs` +1. Gateway `npm test`: 703 pass / 16 skipped.
+
+### P0-9 (часть) · внешние ссылки книги не уводят из ридера · 2026-09-02
+
+- `reader.template.html`: слушатель foliate `external-link` гасит `globalThis.open` и шлёт `externalLink` в RN. `ReaderScreen.tsx`: `onShouldStartLoadWithRequest` пропускает только локальные документы (`file:`, `blob:`, `127.0.0.1`/`localhost`), внешний http(s) блокируется; читатель видит toast «Ссылка ведёт за пределы книги» с хостом. Новый `src/lib/reader/reader-links.ts` (+тест-контракт на шаблон, экран и мост).
+- Не сделано из P0-9: очистка текста при инжесте и `normalized-text-v2` (C5-RC1/RC3) — план в ревью.
+- Проверки: app-expo vitest (полный набор) зелёный, tsc 0, core i18n 9/9. Не проверено глазами в симуляторе (нужен EPUB со внешней ссылкой).

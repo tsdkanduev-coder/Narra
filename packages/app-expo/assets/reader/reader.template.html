@@ -2009,6 +2009,15 @@
             .catch(() => hideFootnoteTip());
         });
 
+        // Внешние ссылки из EPUB (litres/royallib/wikisource и т.п.) раньше
+        // уходили в globalThis.open и уводили WebView из книги. Гасим переход
+        // и сообщаем RN — читатель видит подсказку, книга остаётся открытой.
+        el.addEventListener('external-link', (e) => {
+          e.preventDefault();
+          const href = (e.detail && e.detail.href) || '';
+          try { postToRN('externalLink', { href: String(href).slice(0, 2048) }); } catch (err) {}
+        });
+
         container.appendChild(el);
         view = el;
         currentSectionUsesVerticalWriting = false;
