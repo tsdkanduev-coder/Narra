@@ -18,4 +18,10 @@ describe("Apple Books contents panel", () => {
     expect(sheet).toContain("ReaderContentsPanel");
     expect(sheet).toContain('t("reader.contents", "Содержание")');
   });
+
+  it("shows no-results after a query, not the empty-query hint", () => {
+    expect(panel).toContain('t("reader.searchNoResults", "Ничего не найдено")');
+    expect(panel).toContain("session.search.query.trim()");
+    expect(panel).toContain('t("reader.searchEmptyHint"');
+  });
 });

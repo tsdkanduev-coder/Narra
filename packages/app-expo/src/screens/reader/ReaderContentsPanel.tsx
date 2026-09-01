@@ -107,10 +107,12 @@ export function ReaderContentsPanel({ session }: { session: ReaderTOCSheetSessio
                     </ExpoText>
                   </ListItem>
                 ))
-              ) : session.search.query.trim() && !session.search.isSearching ? (
+              ) : !session.search.isSearching ? (
                 <ListItem>
                   <ExpoText>
-                    {t("reader.searchEmptyHint", "Введите слово или фразу — найдём по всей книге")}
+                    {session.search.query.trim()
+                      ? t("reader.searchNoResults", "Ничего не найдено")
+                      : t("reader.searchEmptyHint", "Введите слово или фразу — найдём по всей книге")}
                   </ExpoText>
                 </ListItem>
               ) : null}
