@@ -30,7 +30,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "version:check": "node scripts/bump-version.js --check",
-    "version:set": "node scripts/bump-version.js"
+    "version:set": "node scripts/bump-version.js",
+    "evals:narra": "node tools/narra-evals/run.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.0"
