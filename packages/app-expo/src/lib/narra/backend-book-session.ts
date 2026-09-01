@@ -14,6 +14,8 @@ export interface BackendBookSessionDependencies {
   error(error: unknown): void;
   expired(binding: BackendBookBinding): void;
   isNotFound(error: unknown): boolean;
+  /** Ошибки, которые повтор не исправит (формат, размер, целостность загрузки). */
+  isTerminal?(error: unknown): boolean;
 }
 
 /** One session per local book, independent identity/manifest work and a single progress high-water. */
@@ -27,6 +29,7 @@ export class BackendBookSession {
   private pendingProgress: number;
   private sentProgress = -1;
   private errors = 0;
+  private terminal = false;
   private currentProgress: number;
   private latest?: BackendBookManifest;
   private mediaBusy = false;
@@ -56,6 +59,7 @@ export class BackendBookSession {
     }, 1500);
   }
   retry() {
+    this.terminal = false;
     if (!this.controller.signal.aborted) void this.refresh();
   }
   stop() {
@@ -98,7 +102,7 @@ export class BackendBookSession {
       });
   }
   private async refresh() {
-    if (this.busy || this.controller.signal.aborted) return;
+    if (this.busy || this.terminal || this.controller.signal.aborted) return;
     this.busy = true;
     clearTimeout(this.timer);
     let delay: number | undefined;
@@ -132,6 +136,14 @@ export class BackendBookSession {
     } catch (error) {
       if (signal.aborted) return;
       this.deps.error(error);
+      if (this.deps.isTerminal?.(error)) {
+        // Неподдерживаемый формат, слишком большой файл, битая загрузка:
+        // раньше сессия повторяла bind/PUT каждые 5–60 с до конца дедлайна,
+        // заново отправляя весь файл. Останавливаемся до явного retry.
+        this.terminal = true;
+        this.pendingProgress = this.sentProgress;
+        return;
+      }
       if (this.binding?.resolution === "private" && this.deps.isNotFound(error)) {
         this.deps.expired(this.binding);
         this.binding = undefined;
@@ -141,7 +153,11 @@ export class BackendBookSession {
       delay = Math.min(60_000, 5000 * 2 ** this.errors++);
     } finally {
       this.busy = false;
-      if (!signal.aborted && (delay !== undefined || this.pendingProgress > this.sentProgress))
+      if (
+        !signal.aborted &&
+        !this.terminal &&
+        (delay !== undefined || this.pendingProgress > this.sentProgress)
+      )
         this.timer = setTimeout(() => void this.refresh(), delay ?? 1500);
     }
   }

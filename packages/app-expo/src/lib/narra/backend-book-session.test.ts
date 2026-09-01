@@ -128,3 +128,26 @@ describe("backend book synchronization lifecycle", () => {
     session.stop();
   });
 });
+
+describe("terminal backend errors", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  it("stops retrying after a terminal bind error until an explicit retry", async () => {
+    const { session, deps } = setup();
+    deps.isTerminal = (error) => error === "FORMAT_UNSUPPORTED";
+    vi.mocked(deps.bind).mockRejectedValue("FORMAT_UNSUPPORTED");
+    session.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deps.bind).toHaveBeenCalledTimes(1);
+    expect(deps.error).toHaveBeenCalledWith("FORMAT_UNSUPPORTED");
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(deps.bind).toHaveBeenCalledTimes(1);
+    session.update(0.5);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(deps.bind).toHaveBeenCalledTimes(1);
+    vi.mocked(deps.bind).mockResolvedValue(binding);
+    session.retry();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(deps.bind).toHaveBeenCalledTimes(2);
+  });
+});

@@ -246,6 +246,13 @@ export function backendUnlockProgress(
   return Math.min(0.95, Math.max(0, fraction));
 }
 
+/** Keeps only a deliberate actor/easter-egg voice; assistant voices are gender hints. */
+export function backendActorVoice(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const info = VOICES[value];
+  return info && info.type !== "assistant" ? value : "";
+}
+
 /** Characters use the complete public profile supplied by the backend. */
 export function backendConfirmedCharacters(
   manifest: BackendBookManifest,
@@ -275,7 +282,11 @@ export function backendConfirmedCharacters(
         role: string(profile.role),
         description: string(profile.description),
         gender: profile.gender === "female" ? "female" : "male",
-        voice: typeof profile.voice === "string" && VOICES[profile.voice] ? profile.voice : "",
+        // Бэкенд присылает «ассистентский» голос по полу (Che/She/Erm) — тот же,
+        // что у нарратора, поэтому все герои звучали рассказчиком (C4-RC1).
+        // Такой голос — только подсказка пола; реальный актёрский голос даёт
+        // план assignVoices ниже. Явно назначенный актёр/пасхалка сохраняется.
+        voice: backendActorVoice(profile.voice),
         traits,
         speechStyle: string(profile.speechStyle),
         speechExamples: strings(profile.speechExamples),

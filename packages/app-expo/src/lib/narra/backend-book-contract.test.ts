@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { VOICES } from "./voice-rules";
 import {
   backendConfirmedCharacters,
   backendUnlockProgress,
@@ -296,4 +297,53 @@ describe("backend book contract", () => {
       expect(value.characters[0].assets).toEqual([]);
     },
   );
+});
+
+describe("backend character voices", () => {
+  it("treats the backend assistant voice as a gender hint and assigns actor voices", () => {
+    const value = manifest({
+      characters: [
+        {
+          character_key: "a",
+          name: "Раскольников",
+          full_name: "",
+          provisional: false,
+          state: "ready",
+          first_appearance_text_offset: 0,
+          profile: { gender: "male", voice: "She" },
+          bundle: null,
+        },
+        {
+          character_key: "b",
+          name: "Разумихин",
+          full_name: "",
+          provisional: false,
+          state: "ready",
+          first_appearance_text_offset: 0,
+          profile: { gender: "male", voice: "She" },
+          bundle: null,
+        },
+        {
+          character_key: "c",
+          name: "Марков",
+          full_name: "",
+          provisional: false,
+          state: "ready",
+          first_appearance_text_offset: 0,
+          profile: { gender: "male", voice: "Mar" },
+          bundle: null,
+        },
+      ],
+    });
+    const characters = backendConfirmedCharacters(value, 0.5);
+    const voices = characters.map((character) => character.voice);
+    // Бэкенд дал обоим мужчинам одинаковый ассистентский голос; план даёт
+    // главному герою второй ассистентский, остальным — актёров, и никому —
+    // голос нарратора (дефолт женский, Афина).
+    expect(voices).not.toContain("Che");
+    expect(voices[0]).not.toBe(voices[1]);
+    expect(VOICES[voices[1] ?? ""]?.type).toBe("actor");
+    // Явно выбранная пасхалка сохраняется.
+    expect(voices[2]).toBe("Mar");
+  });
 });

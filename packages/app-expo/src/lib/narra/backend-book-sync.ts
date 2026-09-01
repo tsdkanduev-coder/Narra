@@ -70,6 +70,24 @@ export async function preserveBackendOriginalSource(
   useNarraStore.getState().setBackendOriginalSource(bookId, { path, format, hash });
 }
 
+/** Форматы, которые gateway принимает в POST /v2/books/local (BOOK_FORMATS). */
+const SUPPORTED_BACKEND_FORMATS = new Set(["epub", "fb2", "txt", "pdf"]);
+/** BOOK_UPLOAD_MAX_MIB на gateway по умолчанию. */
+const MAX_BACKEND_SOURCE_BYTES = 50 * 1024 * 1024;
+const TERMINAL_BACKEND_CODES = new Set([
+  "FORMAT_UNSUPPORTED",
+  "SOURCE_TOO_LARGE",
+  "UPLOAD_INTEGRITY",
+  "VALIDATION",
+]);
+
+/** Повтор не поможет: неверный формат/размер/целостность или отклонённый запрос. */
+export function isTerminalBackendBookError(error: unknown): boolean {
+  if (!(error instanceof BackendBookError)) return false;
+  if ([400, 413, 422].includes(error.status)) return true;
+  return Boolean(error.backendCode && TERMINAL_BACKEND_CODES.has(error.backendCode));
+}
+
 const mimeTypes: Record<string, string> = {
   epub: "application/epub+zip",
   pdf: "application/pdf",
@@ -115,6 +133,15 @@ async function bindBook(book: Book, signal: AbortSignal) {
       backendJsonPost({ source: "local", content_sha256: hash }, signal),
     );
     if (response.resolution === "local_registration_required") {
+      const uploadFormat = original?.format ?? book.format;
+      if (!SUPPORTED_BACKEND_FORMATS.has(uploadFormat)) {
+        // Раньше gateway отвечал 400 VALIDATION, а сессия повторяла bind
+        // каждые 5–60 с до дедлайна — без единого сообщения читателю.
+        throw new BackendBookError(400, {
+          code: "FORMAT_UNSUPPORTED",
+          error: `Формат ${uploadFormat} не поддерживается разметкой книги`,
+        });
+      }
       response = await backendBookRequest(
         "/v2/books/local",
         backendJsonPost(
@@ -144,6 +171,14 @@ async function bindBook(book: Book, signal: AbortSignal) {
     const sourceFile = new File(await sourcePath(book));
     const sourceBytes = await sourceFile.bytes();
     if (sourceBytes.byteLength === 0) throw new Error("Book source is empty");
+    if (sourceBytes.byteLength > MAX_BACKEND_SOURCE_BYTES) {
+      // Зеркало BOOK_UPLOAD_MAX_MIB на gateway: иначе PUT получал 413 и файл
+      // отправлялся заново на каждом повторе сессии.
+      throw new BackendBookError(413, {
+        code: "SOURCE_TOO_LARGE",
+        error: "Файл больше 50 МиБ — сервер не примет его для разметки",
+      });
+    }
     const response = await backendBookRequest(backendBookPath(binding.bookEditionId, "source"), {
       method: "PUT",
       headers: {
@@ -270,6 +305,7 @@ function createSession(book: Book, progress: number) {
         }),
       expired: (binding) => expiredEditions.add(binding.bookEditionId),
       isNotFound: (error) => error instanceof BackendBookError && error.status === 404,
+      isTerminal: isTerminalBackendBookError,
     },
     progress,
   );
