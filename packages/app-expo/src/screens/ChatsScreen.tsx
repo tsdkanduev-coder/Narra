@@ -12,6 +12,7 @@ import { NativeSegmentedPager } from "@/components/ui/native-segmented-pager";
 import { getBookTabLabel } from "@/lib/book/book-tab-label";
 import { countRender } from "@/lib/diagnostics/interaction-performance";
 import { loadBackendCharacterMedia } from "@/lib/narra/backend-character-media";
+import { publishLiveReaderProgress } from "@/lib/narra/character-chat-progress";
 import { characterProfileText } from "@/lib/narra/character-profile";
 import {
   type ChatListModel,
@@ -83,6 +84,8 @@ const ChatsContent = memo(function ChatsContent({ model }: { model: ChatListMode
         });
         return;
       }
+      // Читалка пишет library throttled 5 с; с «Мой путь» живой CFI раньше не публиковали.
+      publishLiveReaderProgress(row.bookId, useLibraryStore.getState().updateBook);
       navigation.navigate("NarraCharacterChat", {
         bookId: row.bookId,
         characterId: row.character.id,

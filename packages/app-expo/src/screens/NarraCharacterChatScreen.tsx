@@ -10,6 +10,11 @@ import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { useBackendBook } from "@/hooks/use-backend-book";
 import { type NarraChatMessageInput, completeNarraChat } from "@/lib/ai/narra-chat";
 import { recordTelemetry } from "@/lib/analytics/telemetry";
+import {
+  type CharacterPromptLocation,
+  formatCharacterPromptLocation,
+  resolveCharacterPromptContext,
+} from "@/lib/narra/character-chat-progress";
 import { normalizeCharacterChatPlaceholder } from "@/lib/narra/chat-placeholder";
 import { isCharacterUnlocked, normalizeReadingProgress } from "@/lib/narra/domain";
 import { emptyBookSearchCode, reportNarraError, searchNotReadyCode } from "@/lib/narra/errors";
@@ -53,8 +58,10 @@ export function buildCharacterSystemPrompt(
   progress: number,
   memory: string,
   language: "ru" | "en" = "ru",
+  location?: CharacterPromptLocation,
 ): string {
   const safeProgress = normalizeReadingProgress(progress);
+  const locationLine = formatCharacterPromptLocation(language, location);
   if (language === "en") {
     return `You are ${character.fullName} from “${title}”. Stay completely in character.
 Traits: ${character.traits.join(", ")}.
@@ -62,7 +69,7 @@ Role: ${character.role}.
 Speaking style: ${character.speechStyle}.
 Reply in English, in the first person, naturally, usually in 1–3 sentences. Never say that you are an AI, a model, or a book character.
 Avoid lists and corporate language. React to the reader's actual words; you may disagree, joke, and ask questions.
-The reader has completed about ${Math.round(safeProgress * 100)}% of the book. Do not reveal events, knowledge, relationships, or character fates beyond that point. If a question risks a spoiler, gently deflect in character and return to events the reader already knows without mentioning rules or restrictions.
+The reader has completed about ${Math.round(safeProgress * 100)}% of the book.${locationLine ? ` ${locationLine}` : ""} Do not reveal events, knowledge, relationships, or character fates beyond that point. If a question risks a spoiler, gently deflect in character and return to events the reader already knows without mentioning rules or restrictions.
 You may evade, but do not lie. Speak honestly about events the reader has already reached and do not invent facts that are not in the book.
 ${memory ? `Your long-term memory of the reader:\n${memory}` : ""}`;
   }
@@ -72,7 +79,7 @@ ${memory ? `Your long-term memory of the reader:\n${memory}` : ""}`;
 Манера речи: ${character.speechStyle}.
 Отвечай от первого лица, живо, обычно 1–3 предложениями. Не говори, что ты ИИ, модель или персонаж книги.
 Не используй списки и канцелярит. Реагируй на конкретные слова собеседника, можешь спорить, шутить и задавать вопросы.
-Читатель прошёл примерно ${Math.round(safeProgress * 100)}% книги. Не раскрывай события, знания, отношения и судьбы героев дальше этого прогресса. Если вопрос ведёт к спойлеру, мягко уклонись в своём характере и переведи разговор к уже известным событиям — не упоминай правила или ограничения.
+Читатель прошёл примерно ${Math.round(safeProgress * 100)}% книги.${locationLine ? ` ${locationLine}` : ""} Не раскрывай события, знания, отношения и судьбы героев дальше этого прогресса. Если вопрос ведёт к спойлеру, мягко уклонись в своём характере и переведи разговор к уже известным событиям — не упоминай правила или ограничения.
 Уклоняться можно, лгать нельзя. О том, что читатель уже прошёл, говори честно: не отрицай своих поступков и событий книги, даже если герою неприятно о них вспоминать. Не выдумывай того, чего в книге нет.
 ${memory ? `Твоя долговременная память о собеседнике:\n${memory}` : ""}`;
 }
@@ -187,25 +194,24 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
     })();
   }, [book, bookEditionId, bookId, character, characterId, interfaceLanguage, updateCharacter]);
 
-  const conversation = useMemo<NarraChatMessageInput[]>(
-    () =>
-      character && book
-        ? [
-            {
-              role: "system",
-              content: buildCharacterSystemPrompt(
-                character,
-                book.meta.title,
-                book.progress,
-                memory,
-                interfaceLanguage,
-              ),
-            },
-            ...messages.slice(-18).map(({ role, content }) => ({ role, content })),
-          ]
-        : [],
-    [book, character, interfaceLanguage, memory, messages],
-  );
+  const conversation = useMemo<NarraChatMessageInput[]>(() => {
+    if (!character || !book) return [];
+    const { progress, location } = resolveCharacterPromptContext(bookId, book);
+    return [
+      {
+        role: "system",
+        content: buildCharacterSystemPrompt(
+          character,
+          book.meta.title,
+          progress,
+          memory,
+          interfaceLanguage,
+          location,
+        ),
+      },
+      ...messages.slice(-18).map(({ role, content }) => ({ role, content })),
+    ];
+  }, [book, bookId, character, interfaceLanguage, memory, messages]);
 
   const chatMessages = useMemo(() => {
     const threadId = `narra-character-${bookId}-${characterId}`;
@@ -243,6 +249,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
     setGreetingLoading(true);
     void (async () => {
       try {
+        const { progress, location } = resolveCharacterPromptContext(bookId, book);
         const content = await completeNarraChat({
           messages: [
             {
@@ -250,9 +257,10 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
               content: buildCharacterSystemPrompt(
                 character,
                 book.meta.title,
-                book.progress,
+                progress,
                 "",
                 interfaceLanguage,
+                location,
               ),
             },
             {

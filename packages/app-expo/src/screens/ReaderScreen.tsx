@@ -1235,6 +1235,14 @@ function ReaderContent({ route, navigation }: Props) {
         }
         lastCfiRef.current = detail.cfi;
         setCurrentCfi(detail.cfi);
+        // Живая позиция в уже существующий reader-store — «Мой путь» читает её
+        // до throttled library save. Вкладку при закрытии модалки не снимаем.
+        const reader = useReaderStore.getState();
+        if (!reader.tabs[bookId]) reader.initTab(bookId, bookId);
+        reader.setProgress(bookId, absoluteFraction, detail.cfi);
+        if (detail.tocItem?.label) {
+          reader.setChapter(bookId, detail.section?.current ?? 0, detail.tocItem.label);
+        }
         // Use throttled save instead of immediate update
         throttledSaveProgress(bookId, absoluteFraction, detail.cfi);
       }
@@ -1785,6 +1793,12 @@ function ReaderContent({ route, navigation }: Props) {
     setGoToCfiFn(() => bridge.goToCFI);
     return () => setGoToCfiFn(null);
   }, [bridge.goToCFI, setGoToCfiFn]);
+
+  useEffect(() => {
+    if (!bookId) return;
+    const reader = useReaderStore.getState();
+    if (!reader.tabs[bookId]) reader.initTab(bookId, bookId);
+  }, [bookId]);
 
   // ── Book loading effects ───────────────────────────────────────────────────
 
