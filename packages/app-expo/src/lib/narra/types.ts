@@ -32,6 +32,12 @@ export interface NarraCharacter {
   id: string;
   name: string;
   fullName: string;
+  /**
+   * Прозвища, уменьшительные и другие формы имени (Родя, Соня) — из
+   * бэкенд-профиля (aliases) или анализа; используются матчером имён и
+   * атрибуцией реплик, в UI не показываются.
+   */
+  aliases?: string[];
   role: string;
   /** Canonical backend biography; role remains the safe legacy fallback. */
   description?: string;

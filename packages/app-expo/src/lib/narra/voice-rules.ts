@@ -1,4 +1,4 @@
-import type { NarraGender } from "./types";
+import type { NarraCharacter, NarraGender } from "./types";
 
 /**
  * Единая точка правды правил озвучки Narra.
@@ -262,6 +262,44 @@ export function assignVoices(
 export function clearVoicePlanCache(bookId?: string): void {
   if (bookId) planCache.delete(bookId);
   else planCache.clear();
+}
+
+/**
+ * Пересчитывает автоголоса уже разобранного состава (смена голоса нарратора,
+ * правило 1: ни один герой не должен звучать голосом нарратора, пока есть
+ * свободные голоса). Порядок массива — rank по убыванию значимости. Поле voice
+ * остаётся автоголосом: ручной voiceOverride хранится отдельно и имеет
+ * приоритет при озвучке (voice-markup, scene-audio). Возвращает тот же массив,
+ * если ни один голос не изменился.
+ */
+export function replanCharacterVoices(
+  characters: readonly NarraCharacter[],
+  opts: AssignVoicesOptions = {},
+): NarraCharacter[] {
+  if (characters.length === 0) return [...characters];
+  const plan = assignVoices(
+    characters.map((character, index) => ({
+      id: character.id,
+      gender: character.gender,
+      rank: characters.length - index,
+      isNarrator: character.isNarrator,
+    })),
+    opts,
+  );
+  let changed = false;
+  const next = characters.map((character) => {
+    const assignment = plan.assignments[character.id];
+    const voice = assignment?.voice ?? plan.narratorVoice;
+    const prosody = assignment?.prosody;
+    if (
+      character.voice === voice &&
+      JSON.stringify(character.voiceProsody ?? null) === JSON.stringify(prosody ?? null)
+    )
+      return character;
+    changed = true;
+    return { ...character, voice, voiceProsody: prosody };
+  });
+  return changed ? next : [...characters];
 }
 
 const SENTENCE_SPLIT_RE = /[.!?…]+(?:\s|$)/u;

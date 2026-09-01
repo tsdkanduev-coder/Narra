@@ -22,6 +22,12 @@ export interface CharacterNameSource {
   name: string;
   fullName?: string;
   aliases?: string[];
+  /**
+   * Пол персонажа: при общей основе фамилии у двух героев (Раскольников /
+   * Раскольникова) точные родовые формы («Раскольникова», «Раскольниковой» —
+   * она; «Раскольников», «Раскольниковым» — он) остаются однозначными.
+   */
+  gender?: "male" | "female";
 }
 
 export interface CharacterNameMatcherSpec {
@@ -209,6 +215,22 @@ function exactRussianNameForms(token: string): string[] {
   return [...forms];
 }
 
+/**
+ * Родовые формы русских фамилий на -ов/-ев/-ин: нужны только там, где основа
+ * фамилии общая для мужчины и женщины. Совпадающие формы (муж. род. «Раскольникова»
+ * = жен. им. «Раскольникова») отдаются женской: в авторских ремарках имя стоит
+ * в именительном падеже, а родительный мужской формы редко называет говорящего.
+ */
+function genderedSurnameForms(token: string, gender: "male" | "female"): string[] {
+  if (gender === "female") {
+    const match = /^(.+(?:ов|ев|ёв|ин|ын))а$/.exec(token);
+    if (!match) return [];
+    return [token, `${match[1]}ой`, `${match[1]}ою`];
+  }
+  if (!/(?:ов|ев|ёв|ин|ын)$/.test(token)) return [];
+  return [token, `${token}ым`];
+}
+
 function addId(map: Record<string, string[]>, key: string, id: string): void {
   const existing = map[key];
   if (!existing) {
@@ -239,6 +261,22 @@ export function buildCharacterNameMatcherSpec(
       const stem = stemNameToken(token);
       if (stem.length >= MIN_NAME_STEM_LENGTH) {
         addId(stems, stem, character.id);
+      }
+    }
+  }
+
+  // Родовые формы фамилий добавляем только для общих основ: у единственного
+  // носителя фамилии стем-матчинг и так однозначен.
+  for (const character of characters) {
+    if (!character?.id || !character.gender) continue;
+    const raw = [character.name, character.fullName ?? "", ...(character.aliases ?? [])].join(" ");
+    const tokens = raw.toLowerCase().match(/[a-zа-яё]+/g) ?? [];
+    for (const token of new Set(tokens)) {
+      if (token.length < 3 || stopwordSet.has(token)) continue;
+      const stem = stemNameToken(token);
+      if (stem.length < MIN_NAME_STEM_LENGTH || (stems[stem]?.length ?? 0) < 2) continue;
+      for (const form of genderedSurnameForms(token, character.gender)) {
+        addId(exact, form, character.id);
       }
     }
   }
@@ -277,6 +315,9 @@ function lookupWordIds(word: string, prepared: PreparedSpec): string[] {
   const ids = new Set<string>();
   const exactIds = prepared.exact.get(word);
   if (exactIds) for (const id of exactIds) ids.add(id);
+  // Точная форма конкретнее основы: если словоформа перечислена явно (в том
+  // числе родовая форма фамилии), кандидаты по общей основе её не размывают.
+  if (ids.size > 0) return [...ids];
   for (const ending of prepared.endings) {
     if (ending.length >= word.length) continue;
     if (ending && !word.endsWith(ending)) continue;

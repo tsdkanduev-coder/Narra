@@ -4,6 +4,7 @@ function terminalErrorCode(error) {
   if (error?.code === 'VALIDATION') return 'VALIDATION'
   if (error?.code === 'PARSE' || error instanceof SyntaxError) return 'PARSE'
   if (error?.code === 'TIMEOUT' || error?.name === 'TimeoutError') return 'TIMEOUT'
+  if (error?.code === 'TRUNCATED') return 'TRUNCATED'
   return 'NETWORK'
 }
 
@@ -23,7 +24,20 @@ export async function settleProviderResponse({ consume, finalizeAttempt }) {
   }
 }
 
-export function validateChatCompletionPayload(payload) {
+/** True when the provider stopped generating because max_tokens ran out. */
+export function isTruncatedChatCompletion(payload) {
+  return Array.isArray(payload?.choices) &&
+    payload.choices.length > 0 &&
+    payload.choices.every((choice) => choice?.finish_reason === 'length')
+}
+
+/**
+ * Structured (JSON) tasks cannot survive a body cut by max_tokens: the JSON is
+ * unparsable and retrying the same prompt reproduces the same cut. Callers that
+ * need a whole document pass `rejectTruncated` so the failure is attributed to
+ * TRUNCATED instead of a generic PARSE error.
+ */
+export function validateChatCompletionPayload(payload, { rejectTruncated = false } = {}) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw Object.assign(new Error('LLM returned an invalid completion payload'), {
       code: 'PARSE', status: 502
@@ -51,6 +65,12 @@ export function validateChatCompletionPayload(payload) {
         ? 'LLM completion was blocked by content safety'
         : 'LLM completion did not contain a choice'),
       { code: censored ? 'CENSOR' : 'PARSE', status: censored ? 422 : 502 }
+    )
+  }
+  if (rejectTruncated && isTruncatedChatCompletion(payload)) {
+    throw Object.assign(
+      new Error('LLM completion was truncated by the max_tokens limit'),
+      { code: 'TRUNCATED', status: 502, finishReason: 'length' }
     )
   }
   return payload

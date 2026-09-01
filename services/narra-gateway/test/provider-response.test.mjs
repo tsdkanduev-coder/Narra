@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  isTruncatedChatCompletion,
   settleProviderResponse,
   validateChatCompletionPayload
 } from '../provider-response.mjs'
@@ -41,4 +42,23 @@ test('non-stream completion rejects in-band error and content-filter finish', ()
     }),
     (error) => error?.code === 'CENSOR'
   )
+})
+
+test('a completion cut by max_tokens is reported as TRUNCATED only for whole-document callers', async () => {
+  const truncated = {
+    choices: [{ finish_reason: 'length', message: { content: '{"traits":[' } }]
+  }
+  assert.equal(validateChatCompletionPayload(truncated), truncated)
+  assert.equal(isTruncatedChatCompletion(truncated), true)
+  assert.equal(isTruncatedChatCompletion({ choices: [{ finish_reason: 'stop' }] }), false)
+  assert.throws(
+    () => validateChatCompletionPayload(truncated, { rejectTruncated: true }),
+    (error) => error?.code === 'TRUNCATED' && error?.status === 502
+  )
+  const events = []
+  await assert.rejects(settleProviderResponse({
+    consume: async () => validateChatCompletionPayload(truncated, { rejectTruncated: true }),
+    finalizeAttempt: async (event) => events.push(event)
+  }))
+  assert.deepEqual(events, [{ status: 'failed', error_code: 'TRUNCATED' }])
 })
