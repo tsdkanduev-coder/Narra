@@ -39,6 +39,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P1 | `POST /v2/ai/chat/stream` без search-before-LLM (complete уже грунтовал) | fixed `7f88466e` |
 | P1 | Prefetch / `ensureBookScenesThrough` 404/null без `normalized_text_*` | fixed `7f88466e` |
 | P1 | `generateBookScene` слал `previousExcerpts=[]` при уже загруженном тексте | fixed `7f88466e` |
+| P1 | `character-analysis.ts` звал `chat/stream` без `book_edition_id` | fixed `f82ba52d` |
 
 ### Что починено (этот проход)
 
@@ -65,6 +66,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `5d9ca406` P1: ChatScreen → `/v2/ai/chat/complete`; `SEARCH_NOT_READY` не отвечает мимо книги
 - `d0ef91ae` P1: пустой search / сцена без edition / dead-leased analysis / портреты gpt-image-2
 - `7f88466e` leftover P1: stream search-before-LLM, prefetch без `normalized_text_*`, `previousExcerpts` из текста
+- `f82ba52d` leftover P1: анализ героев → complete + `book_edition_id`
 
 ### Что всплыло после более поздней фазы
 
@@ -87,6 +89,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Stream `/v2/ai/chat/stream` всё ещё без search-before-LLM — fixed `7f88466e`.
 - Prefetch без `normalized_text_*` (on-demand `scenes/at` уже чинили) — fixed `7f88466e`.
 - `generateBookScene` слал `previousExcerpts=[]` при уже загруженном тексте — fixed `7f88466e`.
+- `character-analysis.ts` звал stream без edition — fixed `f82ba52d`.
 
 ### Что остаётся
 
@@ -104,8 +107,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Пакетный `enqueueBookSceneBackfill` всё ещё выбирает только published `book-markup-v3`. On-demand `scenes/at` и prefetch этим фильтром не пользуются.
 - Без `analysisRepository` catalog-scope по-прежнему не греет `charactersDue` (как было в коде; канон «только catalog» коду не соответствует).
 - Postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL` не гонялись.
-- `character-analysis.ts` ещё ходит в `POST /v2/ai/chat/stream` без `book_edition_id` — поиск не запускается (как complete без edition). Loop 6 чат идёт в complete.
-- Stream и complete теперь оба зовут `attachBookSearchContext` до LLM. HTTP-формы не меняли.
+- Stream, complete и анализ героев зовут `attachBookSearchContext` до LLM, если есть `book_edition_id`. HTTP-формы не меняли.
+- Локальная книга без edition / binding: анализ не идёт в LLM (`SEARCH_NOT_READY`), как Loop 6 чат.
 
 ## P0 — backend reader path · 2026-08-31 · a19a07ce
 
@@ -141,6 +144,14 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `generateBookScene` передаёт их в `sceneGenerationPrompt`. Публичный HTTP не менялся.
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
+
+## leftover P1 — character-analysis → complete + edition · 2026-09-01 · f82ba52d
+
+- `character-analysis.ts` больше не зовёт `POST /v2/ai/chat/stream`.
+- Анализ идёт в `POST /v2/ai/chat/complete` с `book_edition_id` (книга или `backendBinding`) и `purpose: structured_task` — тот же `attachBookSearchContext`, что Loop 6 / stream.
+- Без edition запрос не уходит: `SEARCH_NOT_READY`. Индекс не готов / пустой поиск — как complete.
+- HTTP-формы не меняли. Foliate / устройство / живая «Война и мир» не проверяли.
+- Проверки: vitest character-analysis + queue + chat-ui + narra-chat 19/19.
 
 ## leftover P1 — stream grounding / prefetch text / previousExcerpts · 2026-09-01 · 7f88466e
 
