@@ -46,7 +46,7 @@
     "sync:storybook-covers:nano": "node scripts/sync-nano-storybook-covers.mjs",
     "sync:native-variant": "node scripts/configure-native-variant.js",
     "lint": "biome check .",
-    "test": "vitest run src/lib/narra src/lib/book src/lib/reader src/lib/diagnostics src/lib/ai/narra-gateway-fetch.test.ts src/lib/ai/openrouter-chat.test.ts",
+    "test": "vitest run src/lib/narra src/lib/book src/lib/reader src/lib/diagnostics src/lib/ai/narra-gateway-fetch.test.ts src/lib/ai/openrouter-chat.test.ts src/lib/ai/narra-chat.test.ts",
     "eas-build-pre-install": "bash scripts/eas-install-ios-build-tools.sh",
     "eas-build-post-install": "pnpm run build:reader && node scripts/configure-native-variant.js",
     "eas:device:create": "pnpm exec eas device:create",

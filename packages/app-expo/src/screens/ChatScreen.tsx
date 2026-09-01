@@ -15,21 +15,21 @@ import { Animated, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } f
 import { KeyboardController } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useStreamingChat } from "@/hooks";
+import { useBackendBook } from "@/hooks/use-backend-book";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
-import { resolveActiveAIConfig } from "@/lib/ai/resolve-active-ai-config";
-import { useLibraryStore } from "@/stores";
+import { completeNarraChat } from "@/lib/ai/narra-chat";
+import { NarraServiceError, reportNarraError, searchNotReadyCode } from "@/lib/narra/errors";
+import { useLibraryStore, useNarraStore } from "@/stores";
 import { useChatStore } from "@/stores/chat-store";
-import { useSettingsStore } from "@/stores/settings-store";
-import type { AttachedQuote } from "@readany/core/types";
+import type { AttachedQuote, Message } from "@readany/core/types";
 import type { CitationPart } from "@readany/core/types/message";
 import {
   convertToMessageV2,
   formatRelativeTimeShort,
   getMonthLabel,
   groupThreadsByTime,
-  mergeMessagesWithStreaming,
 } from "@readany/core/utils";
+import * as Crypto from "expo-crypto";
 
 import { NarraChat } from "@/components/chat/NarraChat";
 import { AnimatedNarraFace } from "@/components/chat/animated-narra-face";
@@ -57,6 +57,28 @@ interface ChatScreenProps {
   onBack?: () => void;
 }
 
+function composeChatPrompt(text: string, quotes?: AttachedQuote[]): string {
+  const trimmed = text.trim();
+  if (quotes && quotes.length > 0) {
+    const quotesText = quotes.map((quote) => `> ${quote.text.slice(0, 300)}`).join("\n\n");
+    return trimmed
+      ? `Про этот фрагмент:\n${quotesText}\n\n${trimmed}`
+      : `Про этот фрагмент:\n${quotesText}\n\nРазбери этот отрывок.`;
+  }
+  return trimmed;
+}
+
+function buildNarraChatSystemPrompt(title?: string, progress?: number): string {
+  if (!title) {
+    return "Ты — Narra, спутница чтения. Отвечай по-русски, коротко и по делу. Не выдумывай факты книг. Не говори, что ты ИИ.";
+  }
+  const percent = Math.round(Math.max(0, Math.min(1, progress ?? 0)) * 100);
+  return `Ты — Narra, спутница чтения книги «${title}». Отвечай по-русски, коротко и по делу.
+Читатель прошёл примерно ${percent}% книги. Не раскрывай события дальше этой точки.
+Опирайся только на фрагменты книги, которые приложены к запросу. Если их нет или недостаточно — скажи, что не можешь ответить по книге, не выдумывай.
+Не говори, что ты ИИ.`;
+}
+
 export function ChatScreen({
   embedded = false,
   embeddedBookId,
@@ -74,7 +96,17 @@ export function ChatScreen({
     () => (bookId ? books.find((item) => item.id === bookId) : undefined),
     [bookId, books],
   );
+  useBackendBook(book);
+  const narraBook = useNarraStore((state) => (bookId ? state.books[bookId] : undefined));
+  const bookEditionId = narraBook?.backendBinding?.bookEditionId || book?.bookEditionId;
   const [quotes, setQuotes] = useState<AttachedQuote[]>([]);
+  const [sending, setSending] = useState(false);
+  const lastFailedRef = useRef<{
+    text: string;
+    quotes?: AttachedQuote[];
+    reuseUserMessage: boolean;
+  } | null>(null);
+  const handleRetryRef = useRef<() => void>(() => {});
   const headerSafeAreaTop = embedded ? NARRA_CHAT_EMBEDDED_TOP_INSET : insets.top;
   const headerHeight = headerSafeAreaTop + NARRA_CHAT_HEADER_HEIGHT;
   const goBack = useCallback(() => {
@@ -162,6 +194,9 @@ export function ChatScreen({
   const setBookActiveThread = useChatStore((s) => s.setBookActiveThread);
   const getActiveThreadId = useChatStore((s) => s.getActiveThreadId);
   const getThreadsForContext = useChatStore((s) => s.getThreadsForContext);
+  const createThread = useChatStore((s) => s.createThread);
+  const addMessage = useChatStore((s) => s.addMessage);
+  const updateThreadTitle = useChatStore((s) => s.updateThreadTitle);
 
   useEffect(() => {
     if (bookId) {
@@ -181,96 +216,166 @@ export function ChatScreen({
     }
   }, [activeThreadId, bookId, firstContextThreadId, setBookActiveThread]);
 
-  // Streaming chat
-  const {
-    isStreaming,
-    currentMessage,
-    currentStep,
-    error,
-    errorThreadId,
-    sendMessage,
-    retryLastMessage,
-    stopStream,
-  } = useStreamingChat(bookId ? { book, bookId } : undefined);
-
-  // Messages - compute directly without useMemo to ensure reactivity
   const activeThread = activeThreadId
     ? threads.find((thread) => thread.id === activeThreadId)
     : null;
+  const allMessages = convertToMessageV2(activeThread?.messages || []);
 
-  const activeCurrentMessage =
-    activeThread?.id === currentMessage?.threadId ? currentMessage : null;
-  const displayMessages = convertToMessageV2(activeThread?.messages || []);
-  const allMessages = mergeMessagesWithStreaming(
-    displayMessages,
-    activeCurrentMessage,
-    isStreaming,
+  const getOrCreateThread = useCallback(async () => {
+    const {
+      threads: freshThreads,
+      generalActiveThreadId,
+      bookActiveThreadIds,
+    } = useChatStore.getState();
+    const activeId = bookId ? bookActiveThreadIds[bookId] || null : generalActiveThreadId;
+    const existing = activeId ? freshThreads.find((thread) => thread.id === activeId) : null;
+    if (existing) return existing;
+    return await createThread(bookId);
+  }, [bookId, createThread]);
+
+  const showChatFailure = useCallback(
+    (error: unknown) => {
+      const normalized = reportNarraError("narra_chat", error);
+      const readyCode = searchNotReadyCode(error) || searchNotReadyCode(normalized);
+      toast.error(
+        readyCode
+          ? t("chat.searchNotReady", "SEARCH_NOT_READY")
+          : t("chat.responseFailed", "Не удалось получить ответ"),
+        {
+          description: readyCode
+            ? t(
+                "chat.searchNotReadyMessage",
+                "Поиск по книге ещё не готов. Ответ без книги недоступен.",
+              )
+            : normalized.message,
+          action: {
+            label: t("common.retry", "Повторить"),
+            onClick: () => handleRetryRef.current(),
+          },
+        },
+      );
+    },
+    [t],
   );
 
-  // Handlers
-  const handleSend = useCallback(
-    async (text: string, deepThinking: boolean, spoilerFree: boolean, quotes?: AttachedQuote[]) => {
-      // Validate AI config before sending
-      const state = useSettingsStore.getState();
-      const resolvedAIConfig = await resolveActiveAIConfig(state);
+  const sendChat = useCallback(
+    async (text: string, attachedQuotes?: AttachedQuote[], reuseUserMessage = false) => {
+      const prompt = composeChatPrompt(text, attachedQuotes);
+      if (!prompt || sending) return;
 
-      if (!resolvedAIConfig) {
-        toast.error(t("chat.configRequired", "Настройте ИИ"), {
-          description: t(
-            "chat.configRequiredMessage",
-            "Добавьте адрес API, ключ и модель в настройках",
+      lastFailedRef.current = { text, quotes: attachedQuotes, reuseUserMessage };
+
+      if (bookId && !bookEditionId) {
+        showChatFailure(
+          new NarraServiceError(
+            "SERVICE",
+            "Поиск по книге ещё не готов (SEARCH_NOT_READY). Ответ без книги недоступен.",
+            undefined,
+            undefined,
+            "SEARCH_NOT_READY",
           ),
-          action: {
-            label: t("common.settings", "Настройки"),
-            onClick: () => navigation.navigate("AISettings"),
-          },
-        });
+        );
         return;
       }
 
-      await sendMessage(text, bookId, deepThinking, spoilerFree, quotes, resolvedAIConfig);
+      setSending(true);
+      let userPersisted = reuseUserMessage;
+      try {
+        const thread = await getOrCreateThread();
+        if (!reuseUserMessage && thread.messages.length === 0 && !thread.title) {
+          await updateThreadTitle(thread.id, (text.trim() || prompt).slice(0, 50));
+        }
+
+        if (!reuseUserMessage) {
+          const userMessage: Message = {
+            id: Crypto.randomUUID(),
+            threadId: thread.id,
+            role: "user",
+            content: prompt,
+            createdAt: Date.now(),
+          };
+          await addMessage(thread.id, userMessage);
+          userPersisted = true;
+          lastFailedRef.current = { text, quotes: attachedQuotes, reuseUserMessage: true };
+        }
+
+        const fresh =
+          useChatStore.getState().threads.find((item) => item.id === thread.id) ?? thread;
+        const history = fresh.messages
+          .filter((message) => message.role === "user" || message.role === "assistant")
+          .slice(-18)
+          .map((message) => ({
+            role: message.role as "user" | "assistant",
+            content: message.content,
+          }));
+
+        const content = await completeNarraChat({
+          messages: [
+            {
+              role: "system",
+              content: buildNarraChatSystemPrompt(book?.meta.title, book?.progress),
+            },
+            ...history,
+          ],
+          temperature: 0.8,
+          purpose: bookEditionId ? "character_chat" : "summary",
+          origin: "user",
+          analyticsTier: "essential",
+          bookEditionId,
+        });
+
+        await addMessage(thread.id, {
+          id: Crypto.randomUUID(),
+          threadId: thread.id,
+          role: "assistant",
+          content,
+          createdAt: Date.now(),
+        });
+        lastFailedRef.current = null;
+      } catch (error) {
+        lastFailedRef.current = {
+          text,
+          quotes: attachedQuotes,
+          reuseUserMessage: userPersisted,
+        };
+        showChatFailure(error);
+      } finally {
+        setSending(false);
+      }
     },
-    [bookId, navigation, sendMessage, t],
+    [
+      addMessage,
+      book?.meta.title,
+      book?.progress,
+      bookEditionId,
+      bookId,
+      getOrCreateThread,
+      sending,
+      showChatFailure,
+      updateThreadTitle,
+    ],
+  );
+
+  const handleSend = useCallback(
+    async (
+      text: string,
+      _deepThinking: boolean,
+      _spoilerFree: boolean,
+      nextQuotes?: AttachedQuote[],
+    ) => {
+      await sendChat(text, nextQuotes, false);
+    },
+    [sendChat],
   );
 
   const handleRetry = useCallback(async () => {
-    const state = useSettingsStore.getState();
-    const resolvedAIConfig = await resolveActiveAIConfig(state);
-
-    if (!resolvedAIConfig) {
-      toast.error(t("chat.configRequired", "Настройте ИИ"), {
-        description: t(
-          "chat.configRequiredMessage",
-          "Добавьте адрес API, ключ и модель в настройках",
-        ),
-        action: {
-          label: t("common.settings", "Настройки"),
-          onClick: () => navigation.navigate("AISettings"),
-        },
-      });
-      return;
-    }
-
-    await retryLastMessage(resolvedAIConfig);
-  }, [navigation, retryLastMessage, t]);
-
-  const shownChatErrorRef = useRef<string | null>(null);
-  useEffect(() => {
-    const activeError = error && activeThread?.id === errorThreadId ? error : null;
-    if (!activeError) {
-      shownChatErrorRef.current = null;
-      return;
-    }
-    const errorKey = `${errorThreadId}:${activeError.message}`;
-    if (shownChatErrorRef.current === errorKey) return;
-    shownChatErrorRef.current = errorKey;
-    toast.error(t("chat.responseFailed", "Не удалось получить ответ"), {
-      action: {
-        label: t("common.retry", "Повторить"),
-        onClick: () => void handleRetry(),
-      },
-    });
-  }, [activeThread?.id, error, errorThreadId, handleRetry, t]);
+    const failed = lastFailedRef.current;
+    if (!failed || sending) return;
+    await sendChat(failed.text, failed.quotes, failed.reuseUserMessage);
+  }, [sendChat, sending]);
+  handleRetryRef.current = () => {
+    void handleRetry();
+  };
 
   const handleNewThread = useCallback(() => {
     if (bookId) {
@@ -452,7 +557,7 @@ export function ChatScreen({
             onBack={goBack}
             safeAreaTop={headerSafeAreaTop}
             subtitle={
-              isStreaming
+              sending
                 ? t("narra.characterTyping", "Печатает...")
                 : t("narra.characterOnline", "онлайн")
             }
@@ -469,10 +574,8 @@ export function ChatScreen({
           <View style={s.content}>
             <NarraChat
               messages={allMessages}
-              isStreaming={isStreaming}
-              currentStep={currentStep}
+              isStreaming={sending}
               onSend={handleSend}
-              onStop={stopStream}
               quotes={quotes}
               onRemoveQuote={handleRemoveQuote}
               onCitationClick={handleCitationClick}

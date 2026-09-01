@@ -28,6 +28,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | `generateBookScene` слал пустые genre/chapter | fixed `570ebc01` |
 | P0 | Catalog ingest / marking_up оставлял v2-константу; «Война и мир» без analysis-run | fixed `b3aefcbc` |
 | P0 | `POST /v2/ai/chat/complete` отвечал без `GET /:bookEditionId/search` | fixed `e0c24363` |
+| P1 | `ChatScreen` слал Loop 6 через local RAG `useStreamingChat`; `SEARCH_NOT_READY` глотался и шёл ответ мимо книги | fixed this pass |
 | P1 | `narra-gateway-fetch.ts` зашивал `api-test.narra.disrupt.builders` | documented `3d44fc1d` — канон README, host не выдумывали |
 | P1 | sceneJobRunner и `/v2/media/images` слали сцены/обложки в gigachat-image | fixed `9665e023` |
 | P2 | пустой поиск по книге с запросом писал «Введите слово…» | fixed `f9ce77ae` |
@@ -54,6 +55,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `9665e023` P1: сцены/обложки через gpt-image-2, не GigaChat Image
 - `3d44fc1d` P1: fallback Gateway снова канон README (`api-test`); выдуманный production откатили
 - `f9ce77ae` поиск по книге: запрос без совпадений — «Ничего не найдено»
+- этот проход P1: ChatScreen → `/v2/ai/chat/complete`; `SEARCH_NOT_READY` не отвечает мимо книги
 
 ### Что всплыло после более поздней фазы
 
@@ -67,6 +69,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - После P1 leftover: sceneJobRunner / `/v2/media/images` шли в GigaChat — fixed `9665e023`.
 - После specialist paper на `0e87cbdb`: выдуманный `api.narra` откатили на канон README — `3d44fc1d`.
 - Поиск ☰ с запросом без хитов писал «Введите слово…» — fixed `f9ce77ae`.
+- После P0 chat grounding: `ChatScreen` всё ещё звал `useStreamingChat` (core local RAG), а gateway глотал `SEARCH_NOT_READY` и отвечал мимо книги — чиним в этом проходе.
 
 ### Что остаётся
 
@@ -85,6 +88,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Пакетный `enqueueBookSceneBackfill` всё ещё выбирает только published `book-markup-v3`. On-demand `scenes/at` и prefetch этим фильтром не пользуются.
 - Без `analysisRepository` catalog-scope по-прежнему не греет `charactersDue` (как было в коде; канон «только catalog» коду не соответствует).
 - Postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL` не гонялись.
+- `generateBookScene` / `internal-generation-service.mjs`: `previousExcerpts=[]` — leftover, не трогали.
+- Stream-чат `/v2/ai/chat/stream` по-прежнему без search-before-LLM.
 
 ## P0 — backend reader path · 2026-08-31 · a19a07ce
 
@@ -107,10 +112,11 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 ## P0 — chat/complete grounded search · 2026-08-31 · e0c24363
 
 - Опциональный `book_edition_id` (UUID) на `POST /v2/ai/chat/complete`.
-- Gateway вызывает тот же поиск, что `GET /:bookEditionId/search`, до LLM. 404/409/`SEARCH_NOT_READY` не валят чат.
+- Gateway вызывает тот же поиск, что `GET /:bookEditionId/search`, до LLM.
 - Клиент шлёт edition из backendBinding / library book. Memory-purpose без поиска.
 - HTTP-форма остальных полей не менялась. Stream-чат не грунтуем.
-- Проверки: book-chat-grounding 4/4, contracts (optional UUID), tsc app-expo 0.
+- Позже: 409/`SEARCH_NOT_READY` больше не глотается — см. leftover P1 Loop 6.
+- Проверки на тот коммит: book-chat-grounding 4/4, contracts (optional UUID), tsc app-expo 0.
 - Не проверено: живой индекс и устройство.
 
 ## P0 — genre/chapter в generateBookScene · 2026-08-31 · 570ebc01
@@ -119,6 +125,15 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `generateBookScene` передаёт их в `sceneGenerationPrompt`. Публичный HTTP не менялся.
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
+
+## leftover P1 — Loop 6 ChatScreen → gateway search-before-LLM · 2026-09-01
+
+- `ChatScreen` больше не зовёт `useStreamingChat` / local RAG. Loop 6 (чат с Narra) идёт в `POST /v2/ai/chat/complete` с `book_edition_id`.
+- `attachBookSearchContext` больше не глотает 409/`SEARCH_NOT_READY`/`SEMANTIC_SEARCH_NOT_READY`/`NOT_FOUND`: без индекса чат падает, ответа мимо книги нет.
+- UI показывает `SEARCH_NOT_READY` тостом. Повтор — та же кнопка.
+- `previousExcerpts=[]` не трогали. `generateInternalScene` по-прежнему gpt-image-2, не GigaChat Image.
+- Проверки: gateway book-chat-grounding 5/5; vitest errors + chat-ui + narra-chat 10/10; tsc app-expo 0; biome по изменённым файлам чисто.
+- Не проверено: устройство / живой индекс «Война и мир». Stream `/v2/ai/chat/stream` без grounding.
 
 ## leftover P1 — host/README + gpt-image-2 + поиск · 2026-09-01 · 3d44fc1d, 9665e023, f9ce77ae
 

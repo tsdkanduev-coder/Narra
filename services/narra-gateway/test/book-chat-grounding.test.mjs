@@ -42,17 +42,39 @@ test('memory purpose and missing edition skip retrieval', async () => {
   }), messages)
 })
 
-test('not-ready search does not fail the chat', async () => {
-  const grounded = await attachBookSearchContext({
-    search: async () => {
-      throw Object.assign(new Error('index'), { code: 'SEARCH_NOT_READY', status: 409 })
-    },
-    subjectId: 'reader-1',
-    bookEditionId: 'book-1',
-    messages,
-    purpose: 'character_chat'
-  })
-  assert.deepEqual(grounded, messages)
+test('not-ready search fails the chat instead of answering off-book', async () => {
+  await assert.rejects(
+    () =>
+      attachBookSearchContext({
+        search: async () => {
+          throw Object.assign(new Error('index'), { code: 'SEARCH_NOT_READY', status: 409 })
+        },
+        subjectId: 'reader-1',
+        bookEditionId: 'book-1',
+        messages,
+        purpose: 'character_chat'
+      }),
+    (error) => error.code === 'SEARCH_NOT_READY' && error.status === 409
+  )
+})
+
+test('semantic search not ready also fails the chat', async () => {
+  await assert.rejects(
+    () =>
+      attachBookSearchContext({
+        search: async () => {
+          throw Object.assign(new Error('vectors'), {
+            code: 'SEMANTIC_SEARCH_NOT_READY',
+            status: 409
+          })
+        },
+        subjectId: 'reader-1',
+        bookEditionId: 'book-1',
+        messages,
+        purpose: 'character_chat'
+      }),
+    (error) => error.code === 'SEMANTIC_SEARCH_NOT_READY'
+  )
 })
 
 test('complete chat retrieves book search before requestChat', async () => {

@@ -12,7 +12,7 @@ import { type NarraChatMessageInput, completeNarraChat } from "@/lib/ai/narra-ch
 import { recordTelemetry } from "@/lib/analytics/telemetry";
 import { normalizeCharacterChatPlaceholder } from "@/lib/narra/chat-placeholder";
 import { isCharacterUnlocked, normalizeReadingProgress } from "@/lib/narra/domain";
-import { reportNarraError } from "@/lib/narra/errors";
+import { reportNarraError, searchNotReadyCode } from "@/lib/narra/errors";
 import type { NarraCharacter, NarraChatMessage } from "@/lib/narra/types";
 import { toast } from "@/lib/notifications";
 import type { RootStackParamList } from "@/navigation/RootNavigator";
@@ -272,7 +272,16 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
         setGreetingLoading(false);
       }
     })();
-  }, [book, bookEditionId, bookId, character, characterId, interfaceLanguage, messages.length, unlocked]);
+  }, [
+    book,
+    bookEditionId,
+    bookId,
+    character,
+    characterId,
+    interfaceLanguage,
+    messages.length,
+    unlocked,
+  ]);
 
   const refreshMemory = useCallback(
     async (updatedMessages: NarraChatMessage[]) => {
@@ -342,9 +351,21 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
         append(bookId, characterId, assistantMessage);
         void refreshMemory([...messages, userMessage, assistantMessage]);
       } catch (error) {
-        toast.error(t("narra.chatFailedTitle", "Не удалось получить ответ"), {
-          description: reportNarraError("character_chat", error).message,
-        });
+        const normalized = reportNarraError("character_chat", error);
+        const readyCode = searchNotReadyCode(error) || searchNotReadyCode(normalized);
+        toast.error(
+          readyCode
+            ? t("chat.searchNotReady", "SEARCH_NOT_READY")
+            : t("narra.chatFailedTitle", "Не удалось получить ответ"),
+          {
+            description: readyCode
+              ? t(
+                  "chat.searchNotReadyMessage",
+                  "Поиск по книге ещё не готов. Ответ без книги недоступен.",
+                )
+              : normalized.message,
+          },
+        );
       } finally {
         setSending(false);
       }

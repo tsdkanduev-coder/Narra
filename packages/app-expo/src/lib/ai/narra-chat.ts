@@ -29,7 +29,13 @@ export interface NarraChatRequest {
   bookEditionId?: string;
 }
 
-type ChatCompletionResponse = { text?: string; content?: string; error?: string };
+type ChatCompletionResponse = {
+  text?: string;
+  content?: string;
+  error?: string;
+  code?: string;
+  request_id?: string;
+};
 
 async function readCompletion(response: Response): Promise<string> {
   const body = await response.text();
@@ -40,7 +46,13 @@ async function readCompletion(response: Response): Promise<string> {
     payload = null;
   }
   if (!response.ok) {
-    throw new Error(payload?.error || `Chat request failed (${response.status})`);
+    throw new NarraServiceError(
+      "SERVICE",
+      payload?.error || `Chat request failed (${response.status})`,
+      payload?.request_id,
+      undefined,
+      payload?.code,
+    );
   }
   const content = (payload?.text || payload?.content || (payload ? "" : body)).trim();
   if (!content) throw new NarraServiceError("SERVICE", "Сервис вернул пустой ответ.");
