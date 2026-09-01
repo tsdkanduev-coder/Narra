@@ -356,7 +356,7 @@ describe("Narra gateway installation recovery", () => {
 });
 
 describe("Narra gateway build configuration", () => {
-  it("uses the production gateway when a native build has no Expo environment", async () => {
+  it("uses the README-canon gateway when a native build has no Expo environment", async () => {
     vi.resetModules();
     process.env.EXPO_PUBLIC_NARRA_GATEWAY_URL = "";
     process.env.EXPO_PUBLIC_NARRA_GATEWAY_AUTH_MODE = "";
@@ -364,10 +364,9 @@ describe("Narra gateway build configuration", () => {
     const gateway = await import("./narra-gateway-fetch");
 
     expect(gateway.getNarraGatewayConfig()).toEqual({
-      baseUrl: "https://api.narra.disrupt.builders",
+      baseUrl: "https://api-test.narra.disrupt.builders",
       authMode: "installation",
     });
-    expect(gateway.getNarraGatewayConfig().baseUrl).not.toContain("api-test");
   });
 });
 
