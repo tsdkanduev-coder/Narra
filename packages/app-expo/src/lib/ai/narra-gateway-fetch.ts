@@ -19,7 +19,7 @@ const IMAGE_TIMEOUT_MS = 150_000;
 // cover-job POST/GET короткие и используют обычный сетевой таймаут.
 const COVER_TIMEOUT_MS = 180_000;
 const INSTALLATION_TIMEOUT_MS = 15_000;
-const DEFAULT_NARRA_GATEWAY_URL = "https://api-test.narra.disrupt.builders";
+const DEFAULT_NARRA_GATEWAY_URL = "https://api.narra.disrupt.builders";
 
 type NarraGatewayAdapter = (path: string, init: RequestInit) => Promise<Response>;
 

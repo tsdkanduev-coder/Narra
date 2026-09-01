@@ -1,12 +1,13 @@
 # Narra character gateway
 
 The character feature is isolated from the app's general Narra AI configuration. It has no
-hardcoded deployment URL or API key.
+API key in the client. The unconfigured native fallback is the production Gateway
+`https://api.narra.disrupt.builders`. Never bake `api-test.narra.disrupt.builders`.
 
 Configure the Expo build with:
 
 ```sh
-EXPO_PUBLIC_NARRA_GATEWAY_URL=https://your-gateway.example
+EXPO_PUBLIC_NARRA_GATEWAY_URL=https://api.narra.disrupt.builders
 EXPO_PUBLIC_NARRA_GATEWAY_AUTH_MODE=installation
 ```
 
@@ -72,7 +73,6 @@ and ignored.
 - `GET /v2/books/catalog/languages/:language` (`ru` | `en`)
 - `GET /v2/books/genres`
 
-Until a URL is supplied by the build environment (or a host calls `setNarraGatewayAdapter`), the UI
-remains available and shows a configuration error when a network-backed action starts. Characters,
-memories, chat history and generated portrait and scene file paths are persisted locally by the app
-store.
+`EXPO_PUBLIC_NARRA_GATEWAY_URL` overrides the production fallback. A host may also call
+`setNarraGatewayAdapter`. Characters, memories, chat history and generated portrait and scene
+file paths are persisted locally by the app store.
