@@ -28,7 +28,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | `generateBookScene` слал пустые genre/chapter | fixed `570ebc01` |
 | P0 | Catalog ingest / marking_up оставлял v2-константу; «Война и мир» без analysis-run | fixed `b3aefcbc` |
 | P0 | `POST /v2/ai/chat/complete` отвечал без `GET /:bookEditionId/search` | fixed `e0c24363` |
-| P1 | `ChatScreen` слал Loop 6 через local RAG `useStreamingChat`; `SEARCH_NOT_READY` глотался и шёл ответ мимо книги | fixed this pass |
+| P1 | `ChatScreen` слал Loop 6 через local RAG `useStreamingChat`; `SEARCH_NOT_READY` глотался и шёл ответ мимо книги | fixed `5d9ca406` |
 | P1 | `narra-gateway-fetch.ts` зашивал `api-test.narra.disrupt.builders` | documented `3d44fc1d` — канон README, host не выдумывали |
 | P1 | sceneJobRunner и `/v2/media/images` слали сцены/обложки в gigachat-image | fixed `9665e023` |
 | P2 | пустой поиск по книге с запросом писал «Введите слово…» | fixed `f9ce77ae` |
@@ -55,7 +55,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `9665e023` P1: сцены/обложки через gpt-image-2, не GigaChat Image
 - `3d44fc1d` P1: fallback Gateway снова канон README (`api-test`); выдуманный production откатили
 - `f9ce77ae` поиск по книге: запрос без совпадений — «Ничего не найдено»
-- этот проход P1: ChatScreen → `/v2/ai/chat/complete`; `SEARCH_NOT_READY` не отвечает мимо книги
+- `5d9ca406` P1: ChatScreen → `/v2/ai/chat/complete`; `SEARCH_NOT_READY` не отвечает мимо книги
 
 ### Что всплыло после более поздней фазы
 
@@ -126,7 +126,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
 
-## leftover P1 — Loop 6 ChatScreen → gateway search-before-LLM · 2026-09-01
+## leftover P1 — Loop 6 ChatScreen → gateway search-before-LLM · 2026-09-01 · 5d9ca406
 
 - `ChatScreen` больше не зовёт `useStreamingChat` / local RAG. Loop 6 (чат с Narra) идёт в `POST /v2/ai/chat/complete` с `book_edition_id`.
 - `attachBookSearchContext` больше не глотает 409/`SEARCH_NOT_READY`/`SEMANTIC_SEARCH_NOT_READY`/`NOT_FOUND`: без индекса чат падает, ответа мимо книги нет.
