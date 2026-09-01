@@ -104,6 +104,65 @@ export function bookMediaFrontier({ scope, textLength: textLengthValue, readerTe
   )
 }
 
+function snapToSentenceStart(text, offset, floor) {
+  const window = text.slice(floor, offset)
+  const match = window.match(/[.!?…»]\s+(?=[^\s])/g)
+  if (!match) return floor
+  const last = window.lastIndexOf(match[match.length - 1])
+  return floor + last + match[match.length - 1].length
+}
+
+/**
+ * The reader stands at the anchor (the middle of the interval), so the
+ * illustrated excerpt must surround it instead of starting at the interval
+ * head, where the previous scene already ended.
+ */
+export function sceneExcerptAround(text, { start, end, anchor }, maxChars = 1_200) {
+  const boundedStart = Math.max(0, start)
+  const boundedEnd = Math.min(text.length, end)
+  if (boundedEnd <= boundedStart) return ''
+  const half = Math.floor(maxChars / 2)
+  const pivot = Math.min(boundedEnd, Math.max(boundedStart, anchor))
+  let from = Math.max(boundedStart, pivot - half)
+  let to = Math.min(boundedEnd, from + maxChars)
+  from = Math.max(boundedStart, to - maxChars)
+  if (from > boundedStart) {
+    from = snapToSentenceStart(text, from + 1, Math.max(boundedStart, from - 200))
+    to = Math.min(boundedEnd, from + maxChars)
+  }
+  return text.slice(from, to).trim()
+}
+
+/** Short tails of the two preceding slots keep the series consistent. */
+export function previousSceneExcerptsFromText(text, policyValue, textLengthValue, slotIndex, count = 2) {
+  const textLength = positiveTextLength(textLengthValue)
+  const policy = normalizeBookScenePolicy(policyValue, textLength)
+  const excerpts = []
+  for (let index = slotIndex - 1; index >= 0 && excerpts.length < count; index -= 1) {
+    const slot = bookSceneSlotAt(policy, textLength, policy.startTextOffset + index * policy.intervalTextLength)
+    const excerpt = sceneExcerptAround(text, {
+      start: slot.excerptStartTextOffset,
+      end: slot.excerptEndTextOffset,
+      anchor: slot.anchorTextOffset
+    }, 240)
+    if (excerpt) excerpts.unshift(excerpt)
+  }
+  return excerpts
+}
+
+/** Title of the navigation segment that contains the offset ('' when unknown). */
+export function chapterTitleAtOffset(navigation, offset) {
+  const segments = Array.isArray(navigation?.segments) ? navigation.segments : []
+  let best = null
+  for (const segment of segments) {
+    if (!segment || !Number.isSafeInteger(segment.startOffset)) continue
+    if (segment.startOffset > offset) continue
+    if (!best || segment.startOffset >= best.startOffset) best = segment
+  }
+  const title = typeof best?.title === 'string' ? best.title.trim() : ''
+  return title.slice(0, 300)
+}
+
 export function bookSceneIdempotencyKey({
   bookEditionId,
   markupContentHash,

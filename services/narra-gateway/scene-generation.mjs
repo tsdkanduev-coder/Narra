@@ -222,28 +222,36 @@ function assemblePrompt(values, limits) {
  * in the existing GigaChat -> Kandinsky pipeline. Important trailing rules are
  * preserved instead of being silently removed by a provider-level slice.
  */
-export function sceneGenerationPrompt(input) {
+/**
+ * gpt-image-2 (the reader scene route) reads long prompts well. The 950-char
+ * Kandinsky budget cut the excerpt to ~100 chars and dropped most in-frame
+ * characters, so the picture could not match the scene the reader saw.
+ */
+export const SCENE_GPT_IMAGE_PROMPT_LIMIT = 2_500
+
+export function sceneGenerationPrompt(input, { promptLimit = SCENE_PROVIDER_PROMPT_LIMIT } = {}) {
   const values = promptValues(input)
   const limits = Object.fromEntries(
     Object.entries(values).map(([key, value]) => [key, value.length])
   )
+  const generous = promptLimit >= 2_000
   const minimums = {
     previous: values.previous ? 40 : 0,
-    excerpt: 80,
-    canon: values.canon ? 60 : 0,
+    excerpt: generous ? 600 : 80,
+    canon: values.canon ? (generous ? 300 : 60) : 0,
     book: 40,
     artDirection: 60,
     genreLabel: 18
   }
   let prompt = assemblePrompt(values, limits)
   for (const key of ['previous', 'excerpt', 'canon', 'book', 'artDirection', 'genreLabel']) {
-    if (prompt.length <= SCENE_PROVIDER_PROMPT_LIMIT) break
+    if (prompt.length <= promptLimit) break
     const available = Math.max(0, limits[key] - minimums[key])
-    const reduction = Math.min(available, prompt.length - SCENE_PROVIDER_PROMPT_LIMIT + 1)
+    const reduction = Math.min(available, prompt.length - promptLimit + 1)
     limits[key] -= reduction
     prompt = assemblePrompt(values, limits)
   }
-  if (prompt.length > SCENE_PROVIDER_PROMPT_LIMIT) {
+  if (prompt.length > promptLimit) {
     throw new Error('scene prompt policy exceeds the provider-safe budget')
   }
   return prompt

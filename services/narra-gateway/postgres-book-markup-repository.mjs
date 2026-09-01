@@ -20,6 +20,7 @@ import {
   bookSceneIdempotencyKey,
   bookSceneSlotAt,
   bookSceneSlotsThrough,
+  chapterTitleAtOffset,
   normalizeBookScenePolicy
 } from './book-scenes.mjs'
 
@@ -2493,12 +2494,33 @@ export function createPostgresBookMarkupRepository(pool, {
          ORDER BY sort_order, character_key`,
         [row.markup_version_id, row.excerpt_end_text_offset]
       )
+      // Edition context for the prompt (C6-RC2): curated catalog genre instead
+      // of per-slot guessing, and the chapter the slot belongs to.
+      const genres = await pool.query(
+        `SELECT genre FROM book_edition_genres
+         WHERE book_edition_id = $1 ORDER BY position`,
+        [job.bookEditionId]
+      )
+      const navigation = await pool.query(
+        `SELECT run.content_navigation
+         FROM book_analysis_publications AS publication
+         JOIN book_analysis_runs AS run ON run.id = publication.run_id
+         WHERE publication.book_edition_id = $1 AND publication.channel = 'shadow'
+         ORDER BY publication.published_at DESC, publication.id DESC
+         LIMIT 1`,
+        [job.bookEditionId]
+      )
       return {
         bookEditionId: job.bookEditionId,
         targetVersion: job.targetVersion,
         scope: row.scope,
         bookTitle: row.title,
         bookAuthor: row.author,
+        genreId: genres.rows[0]?.genre || '',
+        chapter: chapterTitleAtOffset(
+          navigation.rows[0]?.content_navigation,
+          Number(row.anchor_text_offset)
+        ),
         sceneKey: row.scene_key,
         slotIndex: Number(row.slot_index),
         anchorTextOffset: Number(row.anchor_text_offset),

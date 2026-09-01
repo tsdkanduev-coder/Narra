@@ -304,3 +304,16 @@
 - `persist.ts`: битый JSON и падение `migrate` больше не оставляют стор в «вечно загружается» — снимок откладывается в `<key>.json.corrupt-<ts>`, стор гидрируется дефолтами; финальный `catch` гарантирует `_hasHydrated`.
 - `App.tsx`: `flushAllWrites()` при уходе приложения в фон/неактивность — последнее сообщение чата и привязка книги больше не теряются в окне 500 мс.
 - Тесты: новый `src/stores/persist.test.ts` (4 кейса), папка `src/stores` добавлена в `pnpm test`. Не проверено: поведение на устройстве при жёстком kill.
+
+### P0-6 · промпт сцены: бюджет gpt-image, жанр издания, глава, отрывок вокруг якоря · 2026-09-02 (gateway)
+
+- `scene-generation.mjs`: `sceneGenerationPrompt(input, { promptLimit })`; новый `SCENE_GPT_IMAGE_PROMPT_LIMIT = 2500` для маршрута сцен ридера (gpt-image-2), минимумы отрывка 600 / канона 300 — раньше 950-символьный бюджет Kandinsky резал отрывок до ~100 знаков и выкидывал героев из кадра. Kandinsky-путь ручных сцен остаётся на 950.
+- `book-scenes.mjs`: `sceneExcerptAround` — отрывок строится вокруг якоря слота (середина интервала), а не с начала интервала; `previousSceneExcerptsFromText` — хвосты двух предыдущих слотов для единой серии; `chapterTitleAtOffset` — название главы из `content_navigation`.
+- `postgres-book-markup-repository.mjs` `getBookSceneInput`: жанр издания из `book_edition_genres` (id совпадают с `SCENE_ART_DIRECTIONS`) и глава из навигации run'а shadow-публикации. `internal-generation-service.mjs`: `normalizeBookSceneRequest` принимает опциональные `genreId`/`chapter` (старые воркеры их не шлют — совместимо), `generateBookScene` передаёт их в промпт.
+- Не сделано: версия промпта в idempotency-ключе (C6-RC5) — уже готовые картинки не перегенерируются сами; после деплоя нужен операторский requeue (`retry-failed-book-generation.mjs` / операторский API) для «Преступления и наказания».
+- Тесты: book-scenes +1, scene-generation +1, internal-generation-service (обновлён кейс сцены). Gateway `npm test` зелёный.
+
+### Живая проверка P0-1 · 2026-09-02 · симулятор iPhone 17 Pro Max, staging
+
+- После пересборки `reader.html` в «Преступлении и наказании» на 8-й странице слот сцены виден (рамка-мозаика + кнопка «Сгенерировать сцену»), тап → через несколько секунд картинка сцены встала в текст (слот 0 на staging уже был готов). До фикса на этом месте была пустая страница.
+- Не проверено: слот в состоянии «сцена появится после разметки» для приватной книги; поведение при `queued` на медленном воркере (нужен деплой P0-2 на staging).

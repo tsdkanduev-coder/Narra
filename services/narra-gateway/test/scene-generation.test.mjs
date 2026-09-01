@@ -138,3 +138,28 @@ test('scene jobs reject raw provider controls and malformed ids', () => {
     previous_excerpts: []
   }), /UUID v4/)
 })
+
+test('gpt-image budget keeps the whole excerpt and every in-frame character', async () => {
+  const { SCENE_GPT_IMAGE_PROMPT_LIMIT } = await import('../scene-generation.mjs')
+  const characters = Array.from({ length: 4 }, (_, index) => ({
+    name: `Герой${index}`,
+    fullName: `Герой Номер${index}`,
+    role: 'спутник',
+    gender: 'male',
+    appearance: `высокий человек в длинном пальто и шляпе номер ${index}, тёмные волосы, серые глаза`
+  }))
+  const excerpt = `${characters.map((c) => `${c.name} вошёл в комнату и заговорил.`).join(' ')} ${'Разговор продолжался долго и напряжённо. '.repeat(25)}`
+  const input = {
+    bookTitle: 'Преступление и наказание', bookAuthor: 'Фёдор Достоевский', bookDescription: '',
+    bookSubjects: [], genreId: 'mystery-thriller', chapter: 'Часть первая', excerpt, characters,
+    previousExcerpts: ['Он поднялся по лестнице.']
+  }
+  const tight = sceneGenerationPrompt(input)
+  const generous = sceneGenerationPrompt(input, { promptLimit: SCENE_GPT_IMAGE_PROMPT_LIMIT })
+  assert.ok(tight.length <= SCENE_PROVIDER_PROMPT_LIMIT)
+  assert.ok(generous.length <= SCENE_GPT_IMAGE_PROMPT_LIMIT)
+  assert.ok(generous.length > tight.length)
+  for (const character of characters) assert.match(generous, new RegExp(character.fullName))
+  assert.match(generous, /Разговор продолжался долго/)
+  assert.match(generous, /глава «Часть первая»/)
+})

@@ -208,12 +208,14 @@ test('internal generation service reads the canonical excerpt and stores a scene
     bookAuthor: 'Автор',
     sceneKey: 'text-interval-v1:0',
     slotIndex: 0,
-    anchorTextOffset: 3_000,
+    anchorTextOffset: 100,
     excerptStartTextOffset: 0,
     excerptEndTextOffset: 6_000,
     textLength: normalizedText.length,
     normalizedTextObjectKey: 'normalized',
     normalizedTextHash,
+    genreId: 'mystery-thriller',
+    chapter: 'Часть первая',
     characters: [{
       characterKey: 'character:anna', name: 'Анна', fullName: 'Анна',
       profile: { role: { value: 'Героиня' }, creative: { appearancePrompt: 'тёмные волосы' } }
@@ -226,6 +228,11 @@ test('internal generation service reads the canonical excerpt and stores a scene
   assert.equal(sceneCalls, 1)
   assert.match(scenePrompt, /Анна открыла дверь/)
   assert.match(scenePrompt, /тёмные волосы/)
+  // Edition context reaches the prompt: curated genre art direction and chapter.
+  assert.match(scenePrompt, /ЖАНР И СТИЛЬ \(детектив, криминальная проза или триллер\)/)
+  assert.match(scenePrompt, /глава «Часть первая»/)
+  // The gpt-image route keeps a long excerpt instead of the 950-char Kandinsky cut.
+  assert.ok(scenePrompt.length > 950, `prompt should use the gpt-image budget, got ${scenePrompt.length}`)
   assert.equal(first.asset.type, 'scene_image')
   assert.match(first.asset.objectKey, /\/scenes\/text-interval-v1-aaaaaaaaaaaaaaaa\/0\.png$/)
 })

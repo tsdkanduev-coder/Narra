@@ -8,7 +8,8 @@ import { voiceForGender } from './voices.mjs'
 import { catalogCoverPrompt } from './catalog-cover-prompt.mjs'
 import { normalizeBookDisplayIdentity } from './book-identity.mjs'
 import { buildCharacterPortraitPrompt } from './character-portrait-prompt.mjs'
-import { sceneGenerationPrompt } from './scene-generation.mjs'
+import { previousSceneExcerptsFromText, sceneExcerptAround } from './book-scenes.mjs'
+import { SCENE_GPT_IMAGE_PROMPT_LIMIT, sceneGenerationPrompt } from './scene-generation.mjs'
 import {
   BOOK_ANALYSIS_GENDER_EVIDENCE_TYPES,
   BOOK_ANALYSIS_SYNTHESIS_VERSION,
@@ -444,8 +445,17 @@ function normalizeBookSceneRequest(input) {
     'idempotencyKey', 'bookEditionId', 'targetVersion', 'scope',
     'bookTitle', 'bookAuthor', 'sceneKey', 'slotIndex', 'anchorTextOffset',
     'excerptStartTextOffset', 'excerptEndTextOffset', 'textLength',
-    'normalizedTextObjectKey', 'normalizedTextHash', 'characters'
+    'normalizedTextObjectKey', 'normalizedTextHash', 'characters',
+    // Optional edition context (C6-RC2): catalog genre art direction and the
+    // chapter the slot belongs to. Older workers simply omit them.
+    'genreId', 'chapter'
   ]))
+  if (body.genreId !== undefined && (typeof body.genreId !== 'string' || body.genreId.length > 64)) {
+    invalid('genreId: invalid value')
+  }
+  if (body.chapter !== undefined && (typeof body.chapter !== 'string' || body.chapter.length > 300)) {
+    invalid('chapter: invalid value')
+  }
   const bookEditionId = identifier(body.bookEditionId, 'bookEditionId')
   const targetVersion = identifier(body.targetVersion, 'targetVersion')
   const sceneKey = identifier(body.sceneKey, 'sceneKey')
@@ -2508,22 +2518,30 @@ export function createInternalGenerationService({
             code: 'BOOK_INTEGRITY', status: 409
           })
         }
-        const excerpt = text.slice(
-          input.excerptStartTextOffset,
-          input.excerptEndTextOffset
-        ).trim()
+        // The reader stands at the anchor in the middle of the 6 000-char
+        // interval: illustrate what surrounds it, not the interval head.
+        const excerpt = sceneExcerptAround(text, {
+          start: input.excerptStartTextOffset,
+          end: input.excerptEndTextOffset,
+          anchor: input.anchorTextOffset
+        })
         if (!excerpt) invalid('scene excerpt is empty', 'GENERATION_RESULT_INVALID')
         const prompt = sceneGenerationPrompt({
           bookTitle: input.bookTitle,
           bookAuthor: input.bookAuthor,
           bookDescription: '',
           bookSubjects: [],
-          genreId: '',
-          chapter: '',
+          genreId: input.genreId || '',
+          chapter: input.chapter || '',
           excerpt,
           characters: input.characters.map(sceneCharacter).filter(({ name }) => name),
-          previousExcerpts: []
-        })
+          previousExcerpts: previousSceneExcerptsFromText(
+            text,
+            null,
+            input.textLength,
+            input.slotIndex
+          )
+        }, { promptLimit: SCENE_GPT_IMAGE_PROMPT_LIMIT })
         const generated = await generateScene(prompt, signal, {
           bookEditionId: input.bookEditionId,
           operation: 'generate_book_scene',
