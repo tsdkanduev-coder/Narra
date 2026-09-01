@@ -44,6 +44,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P1 | диалог героя / `completeNarraChat` character_chat без edition → LLM без поиска | fixed `6efe3bb7` |
 | P1 | `scene-audio.ts` звал complete без edition | fixed `f753aebb` |
 | P1 | тост SEARCH_NOT_READY показывал код вместо фразы | fixed `f753aebb` |
+| P1 | чат с «Мой путь» слал stale страницу: промпт без CFI/главы, live CFI не публиковали | fixed `b9ba11d2` |
 
 ### Что починено (этот проход)
 
@@ -73,6 +74,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `f82ba52d` leftover P1: анализ героев → complete + `book_edition_id`
 - `6efe3bb7` leftover P1: summary + диалог героя не идут в LLM без издания
 - `f753aebb` leftover P1: озвучка сцены с изданием; тост «Книга ещё не готова к разговору»
+- `b9ba11d2` leftover P1: чат с «Мой путь» берёт живой CFI; промпт — CFI + глава
 
 ### Что всплыло после более поздней фазы
 
@@ -98,6 +100,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `character-analysis.ts` звал stream без edition — fixed `f82ba52d`.
 - `summary.ts` и диалог героя без edition шли в complete без поиска (не stream) — fixed `6efe3bb7`.
 - `scene-audio.ts` тот же класс (complete + structured_task без edition) — fixed `f753aebb`. Тост больше не показывает код.
+- Чат с «Мой путь» слал только `book.progress` без CFI/главы и не публиковал живую позицию — fixed `b9ba11d2`.
 
 ### Что остаётся
 
@@ -109,7 +112,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Fallback Gateway и EAS — `api-test.narra.disrupt.builders` (канон `services/narra-gateway/README.md`). Другой production-хост не выдумывали.
 - `generateInternalScene`, `/v2/media/images` и портреты (`generateInternalPortrait` → `generateInternalCharacterPortrait`) идут в gpt-image-2. Сцены не возвращали в GigaChat Image. HTTP не меняли.
 - `generateBookScene` берёт жанр из `book_edition_genres` и главу из `content_navigation`; если главы нет — поле пустое, жанр тогда из названия.
-- Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
+- Чат с «Мой путь» берёт живой CFI из reader-store и кладёт CFI/главу в промпт (`b9ba11d2`). Поля `Book` те же. Главы в Book нет: если читалку этой книги не открывали — в промпте только сохранённый `book.currentCfi`. Foliate desktop в Expo reader-store не пишет.
 - Документ `NARRA_GATEWAY.md` сверяет маршруты, формы запросов не переписывались. Речь: `POST /v2/speech/synthesize`.
 - `scenes/at` не ставит отдельную v3-разметку в очередь — v3 идёт своим analysis-пайплайном.
 - Пакетный `enqueueBookSceneBackfill` всё ещё выбирает только published `book-markup-v3`. On-demand `scenes/at` и prefetch этим фильтром не пользуются.
@@ -152,6 +155,14 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `generateBookScene` передаёт их в `sceneGenerationPrompt`. Публичный HTTP не менялся.
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
+
+## leftover P1 — stale progress с «Мой путь» · 2026-09-01 · b9ba11d2
+
+- Проверка в файлах: `buildCharacterSystemPrompt` брал только `book.progress` (%), без CFI/главы. `publishCharacterProgress` — только Reader (`onCharacterTap`). `ChatsScreen.openChat` сразу `navigate`. Гипотеза: stale страница, потому что «Мой путь» не публикует живой CFI — не новая модель прогресса.
+- Reader на relocate пишет `progress` + `currentCfi` + главу в уже существующий `reader-store`. Вкладку при закрытии модалки не снимаем: иначе снова только throttled library (5 с).
+- Перед чатом с «Мой путь» — `updateBook({ progress, currentCfi })`, те же поля, что Reader. Главу в Book не кладём.
+- Промпт: живой CFI/глава, иначе `book.currentCfi`. HTTP не меняли. scene-audio / тост не трогали (`f753aebb`). Foliate / устройство / живая «Война и мир» — leftover.
+- Проверки: vitest character-chat-progress + character-entry-progress + catalog-chat-render — 23/23.
 
 ## leftover P1 — scene-audio + тост без кода · 2026-09-01 · f753aebb
 
