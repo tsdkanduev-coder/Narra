@@ -181,7 +181,10 @@ test('P1: prefetch warmup extracts normalized text before ensureBookScenesThroug
   assert.match(fn, /resolveNormalizedSceneText/)
   assert.match(fn, /normalizedTextObjectKey: textRef\.objectKey/)
   assert.match(fn, /normalizedTextHash: textRef\.contentHash/)
-  assert.ok(fn.indexOf('resolveNormalizedSceneText') < fn.indexOf('ensureBookScenesThrough'))
+  assert.ok(
+    fn.indexOf('const textRef = await resolveNormalizedSceneText')
+      < fn.indexOf('return store.ensureBookScenesThrough')
+  )
 })
 
 test('speech path stays POST /v2/speech/synthesize', async () => {

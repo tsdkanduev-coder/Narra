@@ -36,6 +36,9 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P1 | `narra-gateway-fetch.ts` зашивал `api-test.narra.disrupt.builders` | documented `3d44fc1d` — канон README, host не выдумывали |
 | P1 | sceneJobRunner и `/v2/media/images` слали сцены/обложки в gigachat-image | fixed `9665e023` |
 | P2 | пустой поиск по книге с запросом писал «Введите слово…» | fixed `f9ce77ae` |
+| P1 | `POST /v2/ai/chat/stream` без search-before-LLM (complete уже грунтовал) | fixed `7f88466e` |
+| P1 | Prefetch / `ensureBookScenesThrough` 404/null без `normalized_text_*` | fixed `7f88466e` |
+| P1 | `generateBookScene` слал `previousExcerpts=[]` при уже загруженном тексте | fixed `7f88466e` |
 
 ### Что починено (этот проход)
 
@@ -61,6 +64,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `f9ce77ae` поиск по книге: запрос без совпадений — «Ничего не найдено»
 - `5d9ca406` P1: ChatScreen → `/v2/ai/chat/complete`; `SEARCH_NOT_READY` не отвечает мимо книги
 - `d0ef91ae` P1: пустой search / сцена без edition / dead-leased analysis / портреты gpt-image-2
+- `7f88466e` leftover P1: stream search-before-LLM, prefetch без `normalized_text_*`, `previousExcerpts` из текста
 
 ### Что всплыло после более поздней фазы
 
@@ -79,6 +83,10 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - ReaderScreen без `bookEditionId` шёл в OpenRouter/`/v2/media/images`, мимо `scenes/at`.
 - Catalog backfill пропускал queued/running с мёртвым lease — «Война и мир» зависала в marking_up.
 - `generateInternalPortrait` оставался на gigachat-image; сцены не трогали.
+- Paper PASS на `05961d9e` для P4–P8 + «Мой путь» — не пересобирали.
+- Stream `/v2/ai/chat/stream` всё ещё без search-before-LLM — fixed `7f88466e`.
+- Prefetch без `normalized_text_*` (on-demand `scenes/at` уже чинили) — fixed `7f88466e`.
+- `generateBookScene` слал `previousExcerpts=[]` при уже загруженном тексте — fixed `7f88466e`.
 
 ### Что остаётся
 
@@ -86,7 +94,6 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Устройство / симулятор не проверены. Живая «Война и мир» на postgres не гонялась.
 - Desktop FoliateViewer без scene slots / character tap / `/scenes/at` — leftover.
 - P5 matcher не переписывали: vitest 48/48. Wiring `setCharacterNames` на месте.
-- Prefetch / `ensureBookScenesThrough` по-прежнему не извлекает текст, если нет `normalized_text_*` (только on-demand `scenes/at`).
 - Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'` только для private. Catalog — v3 analysis.
 - Fallback Gateway и EAS — `api-test.narra.disrupt.builders` (канон `services/narra-gateway/README.md`). Другой production-хост не выдумывали.
 - `generateInternalScene`, `/v2/media/images` и портреты (`generateInternalPortrait` → `generateInternalCharacterPortrait`) идут в gpt-image-2. Сцены не возвращали в GigaChat Image. HTTP не меняли.
@@ -97,8 +104,8 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Пакетный `enqueueBookSceneBackfill` всё ещё выбирает только published `book-markup-v3`. On-demand `scenes/at` и prefetch этим фильтром не пользуются.
 - Без `analysisRepository` catalog-scope по-прежнему не греет `charactersDue` (как было в коде; канон «только catalog» коду не соответствует).
 - Postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL` не гонялись.
-- `generateBookScene` / `internal-generation-service.mjs`: `previousExcerpts=[]` — leftover, не трогали.
-- Stream-чат `POST /v2/ai/chat/stream` по-прежнему без search-before-LLM. Клиентский Loop 6 его не зовёт (`complete`). `character-analysis.ts` ещё ходит в stream — leftover.
+- `character-analysis.ts` ещё ходит в `POST /v2/ai/chat/stream` без `book_edition_id` — поиск не запускается (как complete без edition). Loop 6 чат идёт в complete.
+- Stream и complete теперь оба зовут `attachBookSearchContext` до LLM. HTTP-формы не меняли.
 
 ## P0 — backend reader path · 2026-08-31 · a19a07ce
 
@@ -135,6 +142,15 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
 
+## leftover P1 — stream grounding / prefetch text / previousExcerpts · 2026-09-01 · 7f88466e
+
+- `POST /v2/ai/chat/stream` зовёт тот же `attachBookSearchContext`, что complete: search до LLM; `SEARCH_NOT_READY` / `SEMANTIC_SEARCH_NOT_READY` / `SEARCH_EMPTY` («Ничего не найдено») не пускают ответ мимо книги. HTTP-формы не меняли.
+- Prefetch (`manifest` / `advanceProgress` → `warmupBookScenes`) извлекает `normalized_text_*` так же, как on-demand `scenes/at`, и передаёт ключи в `ensureBookScenesThrough`.
+- `generateBookScene` берёт до 2 предыдущих отрывков из уже загруженного нормализованного текста (`previousSceneExcerptsFromText`). Слот 0 — пусто. Схему запроса не расширяли.
+- Paper PASS на `05961d9e` для P4–P8 + «Мой путь» не трогали. Foliate / устройство — leftover.
+- Проверки: gateway book-chat-grounding + p0 + catalog + book-scenes + internal-generation-service 88/88.
+- Не проверено: устройство, Foliate, живая «Война и мир».
+
 ## leftover P1 — empty search / bound scene / dead-lease analysis / portraits · 2026-09-01 · d0ef91ae
 
 - Пустой book search (`snippets.length===0`) бросает `SEARCH_EMPTY` / «Ничего не найдено» — LLM без фрагментов не вызывается.
@@ -153,7 +169,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - UI показывает `SEARCH_NOT_READY` тостом. Повтор — та же кнопка.
 - `previousExcerpts=[]` не трогали. `generateInternalScene` по-прежнему gpt-image-2, не GigaChat Image.
 - Проверки: gateway book-chat-grounding 5/5; vitest errors + chat-ui + narra-chat 10/10; tsc app-expo 0; biome по изменённым файлам чисто.
-- Не проверено: устройство / живой индекс «Война и мир». Stream `/v2/ai/chat/stream` без grounding.
+- Не проверено: устройство / живой индекс «Война и мир». Stream grounding — см. `7f88466e`.
 
 ## leftover P1 — host/README + gpt-image-2 + поиск · 2026-09-01 · 3d44fc1d, 9665e023, f9ce77ae
 
@@ -168,7 +184,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 
 - `loadSceneContext` больше не возвращает null только из-за пустых `normalized_text_*`.
 - `sceneAt` берёт уже подготовленный текст или извлекает его из файла книги (`analysis/ondemand/...`), пишет ключи в job и заполняет пустой analysis run, если он есть.
-- Prefetch / пакетный backfill без этих колонок по-прежнему не греет слоты.
+- Prefetch без этих колонок чинится в `7f88466e` (`warmupBookScenes`). Пакетный backfill по-прежнему без on-demand текста.
 - Проверки: gateway `node --test` book-p0-reader-path + book-catalog-service — 33/33.
 - Не проверено: живой `scenes/at` на postgres/S3; устройство.
 
