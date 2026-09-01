@@ -29,10 +29,10 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | Catalog ingest / marking_up оставлял v2-константу; «Война и мир» без analysis-run | fixed `b3aefcbc` |
 | P0 | `POST /v2/ai/chat/complete` отвечал без `GET /:bookEditionId/search` | fixed `e0c24363` |
 | P1 | `ChatScreen` слал Loop 6 через local RAG `useStreamingChat`; `SEARCH_NOT_READY` глотался и шёл ответ мимо книги | fixed `5d9ca406` |
-| P1 | Пустой search (`snippets.length===0`) шёл в LLM без фрагментов | in progress |
-| P1 | ReaderScreen без edition рисовал сцену через OpenRouter | in progress |
-| P1 | Catalog analysis backfill не лечил dead-leased queued/running (Война и мир) | in progress |
-| P1 | `generateInternalPortrait` всё ещё gigachat-image | in progress |
+| P1 | Пустой search (`snippets.length===0`) шёл в LLM без фрагментов | fixed `d0ef91ae` |
+| P1 | ReaderScreen без edition рисовал сцену через OpenRouter | fixed `d0ef91ae` |
+| P1 | Catalog analysis backfill не лечил dead-leased queued/running (Война и мир) | fixed `d0ef91ae` |
+| P1 | `generateInternalPortrait` всё ещё gigachat-image | fixed `d0ef91ae` |
 | P1 | `narra-gateway-fetch.ts` зашивал `api-test.narra.disrupt.builders` | documented `3d44fc1d` — канон README, host не выдумывали |
 | P1 | sceneJobRunner и `/v2/media/images` слали сцены/обложки в gigachat-image | fixed `9665e023` |
 | P2 | пустой поиск по книге с запросом писал «Введите слово…» | fixed `f9ce77ae` |
@@ -60,7 +60,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `3d44fc1d` P1: fallback Gateway снова канон README (`api-test`); выдуманный production откатили
 - `f9ce77ae` поиск по книге: запрос без совпадений — «Ничего не найдено»
 - `5d9ca406` P1: ChatScreen → `/v2/ai/chat/complete`; `SEARCH_NOT_READY` не отвечает мимо книги
-- этот проход P1: пустой search / сцена без edition / dead-leased analysis / портреты gpt-image-2
+- `d0ef91ae` P1: пустой search / сцена без edition / dead-leased analysis / портреты gpt-image-2
 
 ### Что всплыло после более поздней фазы
 
@@ -135,7 +135,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
 
-## leftover P1 — empty search / bound scene / dead-lease analysis / portraits · 2026-09-01
+## leftover P1 — empty search / bound scene / dead-lease analysis / portraits · 2026-09-01 · d0ef91ae
 
 - Пустой book search (`snippets.length===0`) бросает `SEARCH_EMPTY` / «Ничего не найдено» — LLM без фрагментов не вызывается.
 - `ReaderScreen` без edition не зовёт OpenRouter; только `scenes/at` + `generateInternalScene` (gpt-image-2).
