@@ -1,5 +1,6 @@
 import { narraGatewayRequest } from "@/lib/ai/narra-gateway-fetch";
 import { useNarraStore } from "@/stores/narra-store";
+import { NarraServiceError } from "./errors";
 import { primeCharacterStressForms } from "./stress-markup";
 import type { NarraCharacter, NarraSceneAudioSegment } from "./types";
 import { narratorVoiceFor } from "./voice-rules";
@@ -61,7 +62,18 @@ export function parseNarraAudioScenario(
 export async function generateNarraAudioScenario(
   excerpt: string,
   characters: NarraCharacter[],
+  bookEditionId?: string,
 ): Promise<NarraSceneAudioSegment[]> {
+  const edition = typeof bookEditionId === "string" ? bookEditionId.trim() : "";
+  if (!edition) {
+    throw new NarraServiceError(
+      "SERVICE",
+      "Поиск по книге ещё не готов (SEARCH_NOT_READY). Ответ без книги недоступен.",
+      undefined,
+      undefined,
+      "SEARCH_NOT_READY",
+    );
+  }
   // Словарь ударений имён книги (P9) — синтез сегментов сцены пойдёт через
   // synthesizeNarraSpeech, который читает активный словарь.
   primeCharacterStressForms(characters);
@@ -70,6 +82,7 @@ export async function generateNarraAudioScenario(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      book_edition_id: edition,
       messages: [
         {
           role: "system",

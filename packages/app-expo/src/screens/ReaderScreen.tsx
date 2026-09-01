@@ -8,7 +8,12 @@ import type { NativeContextMenuItem } from "@/components/ui/NativeContextMenuBut
 import { Text } from "@/components/ui/Typography";
 import { useBackendBook } from "@/hooks/use-backend-book";
 import { useReaderBridge } from "@/hooks/use-reader-bridge";
-import type { RelocateEvent, SelectionEvent, VisibleTTSSegment } from "@/hooks/use-reader-bridge";
+import type {
+  RelocateEvent,
+  ReaderSearchResultItem,
+  SelectionEvent,
+  VisibleTTSSegment,
+} from "@/hooks/use-reader-bridge";
 import { durationBucket } from "@/lib/analytics/contract";
 import { recordTelemetry } from "@/lib/analytics/telemetry";
 import {
@@ -27,14 +32,8 @@ import { generateBackendReaderScene, readSceneDataUri } from "@/lib/narra/backen
 import { backendSceneForAnchor } from "@/lib/narra/backend-scene-state";
 import { buildCharacterNameMatcherSpec } from "@/lib/narra/character-name-matcher";
 import { isCharacterUnlocked } from "@/lib/narra/domain";
-import { reportNarraError } from "@/lib/narra/errors";
-import { normalizePersistedNarraMediaUri } from "@/lib/narra/media";
-import { generateNarraSceneImage } from "@/lib/narra/scene-image-openrouter";
-import {
-  sceneImageDataUri,
-  sceneInsertAnchors,
-  sceneSourceKeyForAnchor,
-} from "@/lib/narra/scene-inserts";
+import { NarraServiceError, reportNarraError } from "@/lib/narra/errors";
+import { sceneInsertAnchors, sceneSourceKeyForAnchor } from "@/lib/narra/scene-inserts";
 import {
   INITIAL_SCENE_SUGGESTION_STATE,
   advanceSceneSuggestion,
@@ -185,6 +184,7 @@ import { CONTROLS_TIMEOUT, SCREEN_HEIGHT, SCREEN_WIDTH } from "./reader/reader-c
 import { makeStyles, noteTooltipMdStyles } from "./reader/reader-styles";
 import { useReaderTOCSheet } from "./reader/reader-toc-sheet-context";
 import { useReaderBookmark } from "./reader/useReaderBookmark";
+import { useReaderSearch } from "./reader/useReaderSearch";
 import { useReaderSystemInfo } from "./reader/useReaderSystemInfo";
 import { useReaderTTS } from "./reader/useReaderTTS";
 import { useVolumeButtonPaging } from "./reader/useVolumeButtonPaging";
@@ -539,6 +539,9 @@ function ReaderContent({ route, navigation }: Props) {
     pendingTTSContinueCallbackRef: React.RefObject<(() => void) | null>;
     pendingTTSContinueSafetyTimerRef: React.RefObject<ReturnType<typeof setTimeout> | null>;
   } | null>(null);
+  const searchCompleteRef = useRef<
+    ((count: number, results?: ReaderSearchResultItem[]) => void) | null
+  >(null);
 
   const bridgeRef = useRef<{
     requestPageSnippet: () => void;
@@ -715,11 +718,11 @@ function ReaderContent({ route, navigation }: Props) {
   const sceneSuggestionInterval = useNarraStore((state) => state.sceneSuggestionInterval);
   const sceneSuggestionStateRef = useRef(INITIAL_SCENE_SUGGESTION_STATE);
   const narraScenes = useNarraStore((state) => state.books[bookId]?.scenes);
-  const setNarraScene = useNarraStore((state) => state.setScene);
   const narraSceneRequests = useNarraStore((state) => state.books[bookId]?.sceneRequests);
   const narraSceneAnchorBindings = useNarraStore(
     (state) => state.books[bookId]?.sceneAnchorBindings,
   );
+  const narraScenesByBackendId = useNarraStore((state) => state.books[bookId]?.scenesByBackendId);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Each book owns separate operations; changing books aborts only the previous ones.
   const sceneSlotActions = useMemo(() => new Map<string, AbortController>(), [bookId]);
   useEffect(
@@ -729,20 +732,6 @@ function ReaderContent({ route, navigation }: Props) {
     },
     [sceneSlotActions],
   );
-
-  // Видимый текст страницы — контекст для промпта сцены (как в P6)
-  const collectVisibleSceneExcerpt = useCallback(async () => {
-    const bridge = bridgeRef.current;
-    let excerpt = (await bridge?.getVisibleText())?.trim() ?? "";
-    if (!excerpt) {
-      const visibleSegments = await bridge?.getVisibleTTSSegments(currentCfi || null);
-      excerpt = (visibleSegments ?? [])
-        .map((segment) => segment.text.trim())
-        .filter(Boolean)
-        .join(" ");
-    }
-    return excerpt.trim();
-  }, [currentCfi]);
 
   // Генерация (или перегенерация) сцены для врезки: слот уже показывает
   // плейсхолдер «Рисуем сцену…» — сюда приходим по событию из WebView.
@@ -767,52 +756,35 @@ function ReaderContent({ route, navigation }: Props) {
         // Catalog identity may be present before the persisted binding has hydrated.
         const edition = bookState?.backendBinding?.bookEditionId || book?.bookEditionId;
         usesBackend = Boolean(edition);
-        if (edition) {
-          const previous = bookState?.sceneRequests?.[sourceKey] ?? cached?.backendScene;
-          const manifest = bookState?.backendManifest;
-          const intent =
-            previous?.bookEditionId === edition
-              ? previous
-              : {
-                  bookEditionId: edition,
-                  requestedProgress,
-                  markupIdentity: backendSceneMarkupIdentity(manifest, bookState?.backendBinding),
-                };
-          await generateBackendReaderScene(
-            {
-              bookId,
-              anchor,
-              sourceKey,
-              chapter,
-              intent,
-              display: (targetAnchor, dataUri) =>
-                bridgeRef.current?.replaceSceneSlot(targetAnchor, dataUri),
-              remove: (targetAnchor) => bridgeRef.current?.removeSceneSlot(targetAnchor),
-            },
-            action.signal,
+        if (!edition) {
+          throw new NarraServiceError(
+            "REQUEST",
+            "Сцена рисуется только для книги с изданием в Narra. Ответ без книги недоступен.",
           );
-          return;
         }
-        // Only unbound books retain the independent legacy visible-excerpt path.
-        const excerpt = cached?.excerpt?.trim() || (await collectVisibleSceneExcerpt());
-        if (!excerpt) throw new Error("SCENE_EMPTY_EXCERPT");
-        const imageUri = await generateNarraSceneImage(bookId, chapter, excerpt, characters);
-        if (action.signal.aborted) return;
-        setNarraScene(bookId, {
-          sourceKey,
-          chapter,
-          excerpt,
-          imageUri,
-          generatedAt: Date.now(),
-          anchor,
-        });
-        // Файл читается в RN и передаётся data-URI — WebView не ходит в ФС
-        const base64 = await FileSystem.readAsStringAsync(
-          normalizePersistedNarraMediaUri(imageUri),
-          { encoding: FileSystem.EncodingType.Base64 },
+        const previous = bookState?.sceneRequests?.[sourceKey] ?? cached?.backendScene;
+        const manifest = bookState?.backendManifest;
+        const intent =
+          previous?.bookEditionId === edition
+            ? previous
+            : {
+                bookEditionId: edition,
+                requestedProgress,
+                markupIdentity: backendSceneMarkupIdentity(manifest, bookState?.backendBinding),
+              };
+        await generateBackendReaderScene(
+          {
+            bookId,
+            anchor,
+            sourceKey,
+            chapter,
+            intent,
+            display: (targetAnchor, dataUri) =>
+              bridgeRef.current?.replaceSceneSlot(targetAnchor, dataUri),
+            remove: (targetAnchor) => bridgeRef.current?.removeSceneSlot(targetAnchor),
+          },
+          action.signal,
         );
-        if (!action.signal.aborted)
-          bridgeRef.current?.replaceSceneSlot(anchor, sceneImageDataUri(base64, imageUri));
       } catch (cause) {
         if (action.signal.aborted) return;
         // Native download errors can contain signed URLs. Backend details use the safe journal.
@@ -822,18 +794,7 @@ function ReaderContent({ route, navigation }: Props) {
         sceneSlotActions.delete(anchor);
       }
     },
-    [
-      book?.meta.title,
-      book?.bookEditionId,
-      sceneSlotActions,
-      t,
-      bookId,
-      bookTitle,
-      characters,
-      collectVisibleSceneExcerpt,
-      currentChapter,
-      setNarraScene,
-    ],
+    [book?.meta.title, book?.bookEditionId, sceneSlotActions, t, bookId, bookTitle, currentChapter],
   );
 
   // Врезка восстановлена при загрузке секции — вернуть сохранённую картинку
@@ -1274,6 +1235,14 @@ function ReaderContent({ route, navigation }: Props) {
         }
         lastCfiRef.current = detail.cfi;
         setCurrentCfi(detail.cfi);
+        // Живая позиция в уже существующий reader-store — «Мой путь» читает её
+        // до throttled library save. Вкладку при закрытии модалки не снимаем.
+        const reader = useReaderStore.getState();
+        if (!reader.tabs[bookId]) reader.initTab(bookId, bookId);
+        reader.setProgress(bookId, absoluteFraction, detail.cfi);
+        if (detail.tocItem?.label) {
+          reader.setChapter(bookId, detail.section?.current ?? 0, detail.tocItem.label);
+        }
         // Use throttled save instead of immediate update
         throttledSaveProgress(bookId, absoluteFraction, detail.cfi);
       }
@@ -1438,7 +1407,12 @@ function ReaderContent({ route, navigation }: Props) {
     onBookmarkSnippet: (text: string) => {
       bookmark.onBookmarkSnippet(text);
     },
+    onSearchComplete: (count, results) => {
+      searchCompleteRef.current?.(count, results);
+    },
   });
+  const readerSearch = useReaderSearch({ bridge });
+  searchCompleteRef.current = readerSearch.onSearchComplete;
 
   useEffect(() => {
     noteTooltipVisibleRef.current = !!noteTooltip;
@@ -1522,9 +1496,14 @@ function ReaderContent({ route, navigation }: Props) {
   // Якоря сохранённых сцен: WebView восстанавливает врезки при загрузке
   // секций и просит картинки событием sceneSlotRestored
   const sceneAnchorsJson = useMemo(() => {
-    const anchors = sceneInsertAnchors(narraScenes, narraSceneRequests, narraSceneAnchorBindings);
+    const anchors = sceneInsertAnchors(
+      narraScenes,
+      narraSceneRequests,
+      narraSceneAnchorBindings,
+      narraScenesByBackendId,
+    );
     return anchors.length ? JSON.stringify(anchors) : null;
-  }, [narraScenes, narraSceneRequests, narraSceneAnchorBindings]);
+  }, [narraScenes, narraSceneRequests, narraSceneAnchorBindings, narraScenesByBackendId]);
   const setSceneAnchors = bridge.setSceneAnchors;
   useEffect(() => {
     if (!webViewReady) return;
@@ -1725,6 +1704,13 @@ function ReaderContent({ route, navigation }: Props) {
     },
     [closeTocSheet, goToHrefSafely],
   );
+  const goToContentsCfi = useCallback(
+    (cfi: string) => {
+      goToCFISafely(cfi);
+      closeTocSheet();
+    },
+    [closeTocSheet, goToCFISafely],
+  );
 
   const goBackToPreviousLocation = useCallback(() => {
     if (locationHistoryRef.current.length === 0) return;
@@ -1759,10 +1745,35 @@ function ReaderContent({ route, navigation }: Props) {
       bookId,
       toc,
       currentChapter,
+      bookmarks: bookmark.bookBookmarks,
+      search: {
+        query: readerSearch.searchQuery,
+        results: readerSearch.searchResults,
+        isSearching: readerSearch.isSearching,
+        timedOut: readerSearch.searchTimedOut,
+        onChangeQuery: readerSearch.handleSearchInput,
+        onSubmit: readerSearch.submitSearch,
+        onSelect: goToContentsCfi,
+      },
       onClose: closeTocSheet,
       onSelectTocItem: goToTocItem,
+      onSelectCfi: goToContentsCfi,
     }),
-    [bookId, closeTocSheet, currentChapter, goToTocItem, toc],
+    [
+      bookId,
+      bookmark.bookBookmarks,
+      closeTocSheet,
+      currentChapter,
+      goToContentsCfi,
+      goToTocItem,
+      readerSearch.handleSearchInput,
+      readerSearch.isSearching,
+      readerSearch.searchQuery,
+      readerSearch.searchResults,
+      readerSearch.searchTimedOut,
+      readerSearch.submitSearch,
+      toc,
+    ],
   );
 
   useEffect(() => {
@@ -1782,6 +1793,12 @@ function ReaderContent({ route, navigation }: Props) {
     setGoToCfiFn(() => bridge.goToCFI);
     return () => setGoToCfiFn(null);
   }, [bridge.goToCFI, setGoToCfiFn]);
+
+  useEffect(() => {
+    if (!bookId) return;
+    const reader = useReaderStore.getState();
+    if (!reader.tabs[bookId]) reader.initTab(bookId, bookId);
+  }, [bookId]);
 
   // ── Book loading effects ───────────────────────────────────────────────────
 
@@ -2194,8 +2211,7 @@ function ReaderContent({ route, navigation }: Props) {
     </Reanimated.View>
   );
 
-  const readerToolbarDock =
-    Platform.OS === "ios" ? (
+  const readerToolbarDock = (
       <Reanimated.View
         pointerEvents={loading || !showControls ? "none" : "auto"}
         style={[
@@ -2223,7 +2239,7 @@ function ReaderContent({ route, navigation }: Props) {
           onCharactersPress={handleOpenCharacters}
         />
       </Reanimated.View>
-    ) : null;
+    );
 
   if (loading && !webViewReady && !readerHtmlUri) {
     return (

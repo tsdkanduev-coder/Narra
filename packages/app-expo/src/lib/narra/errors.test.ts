@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { normalizeNarraError } from "./errors";
+import {
+  NarraServiceError,
+  emptyBookSearchCode,
+  normalizeNarraError,
+  searchNotReadyCode,
+} from "./errors";
 
 describe("Narra error messages", () => {
   it("separates book extraction failures from generic service failures", () => {
@@ -29,5 +34,28 @@ describe("Narra error messages", () => {
       code: "SERVICE",
       message: "Сервис отклонил эту сцену по правилам безопасности. Попробуйте другую страницу.",
     });
+  });
+
+  it("keeps SEARCH_NOT_READY visible and does not fall back to a generic service line", () => {
+    const fromCode = normalizeNarraError(
+      new NarraServiceError("SERVICE", "index", undefined, undefined, "SEARCH_NOT_READY"),
+    );
+    expect(fromCode.backendCode).toBe("SEARCH_NOT_READY");
+    expect(fromCode.message).toContain("SEARCH_NOT_READY");
+    expect(fromCode.message).toContain("без книги недоступен");
+    expect(searchNotReadyCode(fromCode)).toBe("SEARCH_NOT_READY");
+
+    const fromText = normalizeNarraError(new Error("SEMANTIC_SEARCH_NOT_READY"));
+    expect(fromText.backendCode).toBe("SEMANTIC_SEARCH_NOT_READY");
+    expect(fromText.message).toContain("SEMANTIC_SEARCH_NOT_READY");
+  });
+
+  it("keeps empty book search as Ничего не найдено instead of a generic service line", () => {
+    const empty = normalizeNarraError(
+      new NarraServiceError("SERVICE", "index", undefined, undefined, "SEARCH_EMPTY"),
+    );
+    expect(empty.backendCode).toBe("SEARCH_EMPTY");
+    expect(empty.message).toBe("Ничего не найдено");
+    expect(emptyBookSearchCode(empty)).toBe("SEARCH_EMPTY");
   });
 });

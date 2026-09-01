@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { ART_STYLE, PROMPT_CHAR_LIMIT, budgetPrompt } from "./art-style";
 
+const CANON_ART_STYLE =
+  "фанарт, стилизованная современная книжная иллюстрация, цифровая живопись с выразительными " +
+  "мазками, НЕ фотореализм, чистые уверенные формы, мягкий рассеянный свет, сдержанная " +
+  "благородная палитра, лёгкая текстура бумаги, единая серия работ одного художника, " +
+  "без текста и надписей";
+
+describe("ART_STYLE canon", () => {
+  it("matches the locked work-order style clause verbatim", () => {
+    expect(ART_STYLE).toBe(CANON_ART_STYLE);
+    expect(ART_STYLE).not.toMatch(/semi-realistic anime/i);
+    expect(ART_STYLE.includes("без текста и надписей")).toBe(true);
+  });
+});
+
 describe("budgetPrompt", () => {
   it("keeps short parts verbatim and ends with the full art style", () => {
     const prompt = budgetPrompt(["Погрудный портрет.", "Выражение лица: спокойное."]);

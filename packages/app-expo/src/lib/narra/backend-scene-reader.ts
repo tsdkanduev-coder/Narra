@@ -39,11 +39,14 @@ export async function generateBackendReaderScene(
 ): Promise<void> {
   const requestId = Crypto.randomUUID();
   let intent = { ...input.intent };
-  const persistIntent = () => {
-    const change = useNarraStore.getState().setSceneRequest(input.bookId, input.sourceKey, intent);
-    for (const anchor of change?.removedAnchors ?? []) input.remove(anchor);
-    return change;
-  };
+    const persistIntent = () => {
+      const change = useNarraStore.getState().setSceneRequest(input.bookId, input.sourceKey, intent);
+      if (!change) return change;
+      for (const removed of change.removedAnchors) {
+        if (removed !== input.anchor && removed !== change.canonicalAnchor) input.remove(removed);
+      }
+      return change;
+    };
   const trace = (stage: string, attempt?: number, code?: number) =>
     recordDiagnostic("scene_request", {
       requestId,
@@ -138,12 +141,16 @@ export async function generateBackendReaderScene(
       },
       intent,
     );
-    for (const anchor of change.removedAnchors) input.remove(anchor);
+    for (const removed of change.removedAnchors) {
+      if (removed !== input.anchor && removed !== change.canonicalAnchor) input.remove(removed);
+    }
     trace("store");
-    if (change.canonicalAnchor !== input.anchor) return;
     const dataUri = await readSceneDataUri(shared.imageUri);
     if (signal.aborted) throw new BackendSceneError("SCENE_ABORTED");
-    input.display(change.canonicalAnchor, dataUri);
+    input.display(input.anchor, dataUri);
+    if (change.canonicalAnchor !== input.anchor) {
+      input.display(change.canonicalAnchor, dataUri);
+    }
     trace("webview");
   } catch (error) {
     recordDiagnostic("scene_request", {

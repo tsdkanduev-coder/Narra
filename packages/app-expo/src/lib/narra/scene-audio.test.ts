@@ -1,4 +1,5 @@
 import { narraGatewayRequest } from "@/lib/ai/narra-gateway-fetch";
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateNarraAudioScenario, parseNarraAudioScenario } from "./scene-audio";
 import type { NarraCharacter } from "./types";
@@ -7,6 +8,8 @@ vi.mock("@/lib/ai/narra-gateway-fetch", () => ({ narraGatewayRequest: vi.fn() })
 vi.mock("@/stores/narra-store", () => ({
   useNarraStore: { getState: () => ({ narratorVoicePreference: "female" }) },
 }));
+
+const EDITION = "11111111-1111-4111-8111-111111111111";
 
 const character: NarraCharacter = {
   id: "shi-qiang",
@@ -24,6 +27,14 @@ const character: NarraCharacter = {
 
 describe("Narra scene audio", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("posts book_edition_id to complete and never calls stream", () => {
+    const source = readFileSync(new URL("./scene-audio.ts", import.meta.url), "utf8");
+    expect(source).toContain("/v2/ai/chat/complete");
+    expect(source).toContain("book_edition_id");
+    expect(source).toContain("SEARCH_NOT_READY");
+    expect(source).not.toContain("/v2/ai/chat/stream");
+  });
 
   it("matches character names and uses the narrator for unknown speakers", () => {
     const segments = parseNarraAudioScenario(
@@ -50,7 +61,7 @@ describe("Narra scene audio", () => {
     );
 
     await expect(
-      generateNarraAudioScenario("— Пойдём, — сказал Ши Цян.", [character]),
+      generateNarraAudioScenario("— Пойдём, — сказал Ши Цян.", [character], EDITION),
     ).resolves.toEqual([expect.objectContaining({ speaker: "Ши Цян", text: "Пойдём." })]);
 
     const [path, request] = vi.mocked(narraGatewayRequest).mock.calls[0] ?? [];
@@ -58,6 +69,16 @@ describe("Narra scene audio", () => {
     expect(JSON.parse(String(request?.body))).toMatchObject({
       purpose: "structured_task",
       origin: "user",
+      book_edition_id: EDITION,
     });
+  });
+
+  it("does not call complete without a bound edition", async () => {
+    await expect(
+      generateNarraAudioScenario("— Пойдём, — сказал Ши Цян.", [character]),
+    ).rejects.toMatchObject({
+      backendCode: "SEARCH_NOT_READY",
+    });
+    expect(narraGatewayRequest).not.toHaveBeenCalled();
   });
 });

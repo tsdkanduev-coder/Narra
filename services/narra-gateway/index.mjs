@@ -3,6 +3,7 @@ import cors from 'cors'
 import { createHmac, randomUUID } from 'crypto'
 import path from 'node:path'
 import { httpsRequest } from './http.mjs'
+import { attachBookSearchContext } from './book-chat-grounding.mjs'
 import {
   parseAvatarBody,
   parseChatBody,
@@ -677,102 +678,9 @@ async function completeInternalChat({ messages, signal, costContext }) {
 }
 
 async function generateInternalPortrait(prompt, signal, costContext = null) {
-  let release
-  const requestId = randomUUID()
-  const attempts = []
-  let retryIndex = 0
-  let costRecorded = false
-  const attempt = async (provider, operation) => {
-    const attemptId = randomUUID()
-    const startedAt = Date.now()
-    try {
-      const value = await operation()
-      attempts.push({
-        attempt_id: attemptId,
-        provider,
-        model: provider,
-        status: 'completed',
-        retry_index: retryIndex,
-        latency_ms: Date.now() - startedAt
-      })
-      retryIndex += 1
-      return value
-    } catch (error) {
-      attempts.push({
-        attempt_id: attemptId,
-        provider,
-        model: provider,
-        status: 'failed',
-        retry_index: retryIndex,
-        latency_ms: Date.now() - startedAt,
-        error_code: error?.code || 'UNKNOWN',
-        http_status: error?.status
-      })
-      retryIndex += 1
-      throw error
-    }
-  }
-  const recordCost = async () => {
-    if (!costContext || costRecorded || !attempts.length) return
-    await recordInternalGenerationCost({
-      context: costContext,
-      modality: 'image',
-      requestId,
-      attempts
-    })
-    costRecorded = true
-  }
-  try {
-    release = await imageGate.acquire(signal)
-    let base64
-    let provider
-    if (LLM_API_KEY) {
-      try {
-        base64 = await attempt('gigachat-image', () => gigachatImage(prompt, signal))
-        provider = 'gigachat-image'
-      } catch (error) {
-        const failure = error
-        if (!base64) {
-          if (!shouldFallbackAfterImageError(failure) || !KANDINSKY_TOKEN) {
-            await recordCost()
-            throw failure
-          }
-          console.error('[internal-generation] portrait fallback to Kandinsky:', failure.message)
-        }
-      }
-    }
-    if (!base64 && KANDINSKY_TOKEN) {
-      try {
-        base64 = await attempt('kandinsky', () => kandinskyQueued(prompt, 1024, 1024, signal))
-      } catch (error) {
-        await recordCost()
-        throw error
-      }
-      provider = 'kandinsky'
-    }
-    if (!base64) {
-      const error = httpErr('NO_KEY', 'No image provider is configured')
-      attempts.push({
-        attempt_id: randomUUID(),
-        provider: 'internal-image',
-        model: 'unconfigured',
-        status: 'not_configured',
-        retry_index: retryIndex,
-        error_code: error.code,
-        latency_ms: 0
-      })
-      await recordCost()
-      throw error
-    }
-    await recordCost()
-    const bytes = Buffer.from(base64, 'base64')
-    if (!bytes.byteLength || bytes.byteLength > 18 * 1024 * 1024) {
-      throw httpErr('NETWORK', 'Image provider returned an invalid portrait')
-    }
-    return { bytes, mimeType: 'image/png', provider }
-  } finally {
-    release?.()
-  }
+  // Portraits use the same gpt-image-2 cover chain as generateInternalScene.
+  // Never send bound art through GigaChat Image.
+  return generateInternalCharacterPortrait(prompt, signal, costContext)
 }
 
 async function measuredInternalImageRequest({ prompt, aspectRatio, signal, costContext }) {
@@ -1092,9 +1000,9 @@ const sceneJobRunner = createCoverJobRunner({
   maxAttempts: SCENE_JOB_MAX_ATTEMPTS,
   attemptTimeoutMs: SCENE_JOB_ATTEMPT_TIMEOUT_SECONDS * 1000,
   generate: async ({ prompt, signal }) => {
-    // Scene generation uses the same healthy server-owned image chain as
-    // portraits. GigaChat is primary; Kandinsky remains its fallback.
-    const generated = await generateInternalPortrait(prompt, signal)
+    // Bound scene jobs use the same gpt-image-2 cover chain as scenes/at.
+    // Never send scenes through GigaChat Image.
+    const generated = await generateInternalScene(prompt, signal)
     return {
       image: generated.bytes.toString('base64'),
       mimeType: generated.mimeType,
@@ -1153,6 +1061,13 @@ if (process.env.DATABASE_URL) {
       embeddingClient: createBookEmbeddingClientFromEnv(process.env)
     })
     console.info('[book-search] API enabled; books are enqueued only by explicit operator command')
+  }
+  if (bookAnalysisRepository) {
+    const analysisBackfill = await bookAnalysisRepository.enqueueCatalogAnalysisBackfill()
+    console.info('[book-analysis] catalog marking_up backfill checked', {
+      books: analysisBackfill.length,
+      created: analysisBackfill.filter((item) => item.created).length
+    })
   }
   if (internalGenerationService && BOOK_ANALYSIS_MEDIA_GENERATION_ENABLED) {
     const identityJobs = await bookMarkupRepository.enqueueMissingBookIdentities()
@@ -1671,6 +1586,13 @@ app.post('/v2/ai/chat/stream', aiLimit, aiDailyLimit, express.json({ limit: '1mb
     recordActorAnalytics = input.analyticsTier !== 'none'
     requestPurpose = input.purpose
     requestId = input.requestId || randomUUID()
+    const groundedMessages = await attachBookSearchContext({
+      search: bookSearchService?.search?.bind(bookSearchService),
+      subjectId: req.installation?.sub,
+      bookEditionId: input.bookEditionId,
+      messages: input.messages,
+      purpose: input.purpose
+    })
     if (recordActorAnalytics) {
       await appendInternalEvent(req, 'ai_request_started', {
         request_id: requestId,
@@ -1680,6 +1602,7 @@ app.post('/v2/ai/chat/stream', aiLimit, aiDailyLimit, express.json({ limit: '1mb
     }
     const { response: upstream, provider, model, responseCost, finalizeAttempt } = await requestChat({
       ...input,
+      messages: groundedMessages,
       requestId,
       stream: true,
       onAttempt: recordActorAnalytics
@@ -1780,6 +1703,13 @@ app.post('/v2/ai/chat/complete', aiLimit, aiDailyLimit, express.json({ limit: '1
     recordActorAnalytics = input.analyticsTier !== 'none'
     requestPurpose = input.purpose
     requestId = input.requestId || randomUUID()
+    const groundedMessages = await attachBookSearchContext({
+      search: bookSearchService?.search?.bind(bookSearchService),
+      subjectId: req.installation?.sub,
+      bookEditionId: input.bookEditionId,
+      messages: input.messages,
+      purpose: input.purpose
+    })
     if (recordActorAnalytics) {
       await appendInternalEvent(req, 'ai_request_started', {
         request_id: requestId,
@@ -1789,6 +1719,7 @@ app.post('/v2/ai/chat/complete', aiLimit, aiDailyLimit, express.json({ limit: '1
     }
     const { response: r, provider, model, attempts, responseCost, finalizeAttempt } = await requestChat({
       ...input,
+      messages: groundedMessages,
       requestId,
       stream: false,
       onAttempt: recordActorAnalytics
@@ -2008,41 +1939,19 @@ app.post('/v2/media/images', imageDailyLimit, express.json({ limit: '1mb' }), as
   try {
     release = await imageGate.acquire(signal)
     const { prompt, width, height, engine } = parseImageBody(req.body)
-    // OpenRouter выбирается клиентом только по назначению (портрет); ключ и
-    // модель по-прежнему остаются на сервере. Provider fallback — Nano Banana;
-    // Kandinsky в этот путь не входит.
-    if (engine === 'openrouter') {
-      const aspectRatio = width * 4 === height * 3 ? '3:4' : width === height ? '1:1' : width > height ? '3:2' : '2:3'
-      const image = await requestCoverImageWithFallback({ prompt, aspectRatio, signal })
-      return res.json({ image: image.image, mime_type: image.mimeType })
-    }
-    // Вертикальные изображения (обложки) и явный engine='kandinsky' (сцены) — Kandinsky:
-    // он соблюдает состав кадра, одежду и размер. Портреты — gigachat-image: быстро.
-    // Взаимные фолбэки.
-    const wantKandinsky = height > width || engine === 'kandinsky'
-    if (wantKandinsky && KANDINSKY_TOKEN) {
-      try {
-        return res.json({ image: await kandinskyQueued(prompt, width, height, signal) })
-      } catch (e) {
-        if (!shouldFallbackAfterImageError(e)) throw e
-        // сцены (engine=kandinsky) на gigachat-image не фолбэчим: он игнорирует
-        // стиль и выдаёт фотореалистичные кинокадры — лучше честная ошибка и повтор
-        if (engine === 'kandinsky') throw e
-        console.error('[image] Kandinsky не удалось, фолбэк на gigachat-image:', e.message)
-        if (!LLM_API_KEY) throw e
-      }
-    }
-    if (LLM_API_KEY) {
-      try {
-        return res.json({ image: await gigachatImage(prompt, signal) })
-      } catch (e) {
-        if (!shouldFallbackAfterImageError(e)) throw e
-        console.error('[image] gigachat-image не удалось, фолбэк на Kandinsky:', e.message)
-        if (!KANDINSKY_TOKEN) throw e
-      }
-    }
-    if (!KANDINSKY_TOKEN) return res.status(400).json({ error: 'Нет ключей для картинок', code: 'NO_KEY' })
-    res.json({ image: await kandinskyQueued(prompt, width, height, signal) })
+    // Scene and cover never go through GigaChat Image. Bound generateInternalScene
+    // and this one-off route share the gpt-image-2 cover provider chain.
+    // `engine` stays in the HTTP body for released clients and is ignored for
+    // provider selection.
+    const isCover = height > width
+    const isScene = engine === 'kandinsky' || width === height
+    const aspectRatio = isCover
+      ? (width * 4 === height * 3 ? '3:4' : '2:3')
+      : isScene
+        ? '4:3'
+        : width * 4 === height * 3 ? '3:4' : width === height ? '1:1' : width > height ? '3:2' : '2:3'
+    const image = await requestCoverImageWithFallback({ prompt, aspectRatio, signal })
+    return res.json({ image: image.image, mime_type: image.mimeType })
   } catch (e) {
     res.status(statusFor(e.code)).json({ error: e.message, code: e.code || 'UNKNOWN' })
   } finally {

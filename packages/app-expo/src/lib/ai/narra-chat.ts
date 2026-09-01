@@ -25,9 +25,17 @@ export interface NarraChatRequest {
   purpose?: "character_chat" | "structured_task" | "summary" | "scenario" | "memory";
   origin?: "user" | "background";
   analyticsTier?: "none" | "essential";
+  /** Каноническое издание для GET /v2/books/:id/search до ответа модели. */
+  bookEditionId?: string;
 }
 
-type ChatCompletionResponse = { text?: string; content?: string; error?: string };
+type ChatCompletionResponse = {
+  text?: string;
+  content?: string;
+  error?: string;
+  code?: string;
+  request_id?: string;
+};
 
 async function readCompletion(response: Response): Promise<string> {
   const body = await response.text();
@@ -38,25 +46,49 @@ async function readCompletion(response: Response): Promise<string> {
     payload = null;
   }
   if (!response.ok) {
-    throw new Error(payload?.error || `Chat request failed (${response.status})`);
+    throw new NarraServiceError(
+      "SERVICE",
+      payload?.error || `Chat request failed (${response.status})`,
+      payload?.request_id,
+      undefined,
+      payload?.code,
+    );
   }
   const content = (payload?.text || payload?.content || (payload ? "" : body)).trim();
   if (!content) throw new NarraServiceError("SERVICE", "Сервис вернул пустой ответ.");
   return content;
 }
 
+const BOOK_DIALOGUE_PURPOSES = new Set(["character_chat"]);
+
+function boundBookEditionId(value?: string): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 export async function completeNarraChat(request: NarraChatRequest): Promise<string> {
   try {
     const origin = request.origin ?? "user";
+    const purpose = request.purpose ?? "character_chat";
+    const bookEditionId = boundBookEditionId(request.bookEditionId);
+    if (BOOK_DIALOGUE_PURPOSES.has(purpose) && !bookEditionId) {
+      throw new NarraServiceError(
+        "SERVICE",
+        "Поиск по книге ещё не готов (SEARCH_NOT_READY). Ответ без книги недоступен.",
+        undefined,
+        undefined,
+        "SEARCH_NOT_READY",
+      );
+    }
     const response = await narraGatewayRequest("/v2/ai/chat/complete", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         messages: request.messages,
         temperature: request.temperature ?? 0.8,
-        purpose: request.purpose ?? "character_chat",
+        purpose,
         origin,
         analytics_tier: request.analyticsTier ?? (origin === "background" ? "none" : "essential"),
+        ...(bookEditionId ? { book_edition_id: bookEditionId } : {}),
       }),
     });
     return await readCompletion(response);

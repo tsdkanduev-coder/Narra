@@ -461,3 +461,61 @@ test('resolve completion freezes evidence before advancing to synthesize', async
     characterKeys: ['character:anna']
   })
 })
+
+test('catalog analysis backfill heals dead-leased queued/running runs, not only missing ones', async () => {
+  const editionId = '123e4567-e89b-42d3-a456-426614174001'
+  const runId = '123e4567-e89b-42d3-a456-426614174002'
+  const pool = scriptedPool([
+    () => ({ rows: [{
+      id: editionId,
+      content_sha256: 'a'.repeat(64),
+      run_id: runId,
+      run_status: 'running'
+    }] }),
+    () => ({ rows: [{ id: runId }] }),
+    () => ({ rows: [{
+      id: editionId,
+      content_sha256: 'a'.repeat(64)
+    }] }),
+    () => ({ rows: [{
+      id: runId,
+      book_edition_id: editionId,
+      input_hash: 'a'.repeat(64), pipeline_version: 'book-analysis-v8',
+      prompt_version: 'book-scan-v4', run_sequence: 1,
+      pipeline_id: 'narra', pipeline_implementation_version: 'book-analysis-v44',
+      normalization_version: 'normalized-text-v1', output_schema_version: 3,
+      stage: 'prepare', status: 'failed'
+    }] }),
+    () => ({ rows: [{
+      id: runId,
+      book_edition_id: editionId,
+      input_hash: 'a'.repeat(64), pipeline_version: 'book-analysis-v8',
+      prompt_version: 'book-scan-v4', run_sequence: 1,
+      pipeline_id: 'narra', pipeline_implementation_version: 'book-analysis-v44',
+      normalization_version: 'normalized-text-v1', output_schema_version: 3,
+      stage: 'prepare', status: 'failed'
+    }] }),
+    (_sql, params) => ({ rows: [{
+      id: params[0], idempotency_key: params[1],
+      book_edition_id: params[2], input_hash: params[3],
+      pipeline_version: params[4], prompt_version: params[5],
+      run_sequence: params[6], stage: 'prepare', status: 'queued'
+    }] }),
+    (_sql, params) => ({ rows: [{
+      id: params[0], run_id: params[1], stage: 'prepare', shard_key: 'book',
+      status: 'queued', priority: params[2], attempts: 0, max_attempts: 5,
+      payload: {}
+    }] })
+  ])
+  const repository = createPostgresBookAnalysisRepository(pool, {
+    idFactory: () => '123e4567-e89b-42d3-a456-426614174010'
+  })
+  const started = await repository.enqueueCatalogAnalysisBackfill({ limit: 10, priority: 40 })
+  assert.equal(started.length, 1)
+  assert.equal(started[0].created, true)
+  const select = pool.queries.find(({ sql }) => /LEFT JOIN LATERAL/.test(sql))
+  assert.match(select.sql, /run\.status IN \('queued', 'running'\)/)
+  assert.match(select.sql, /lease_expires_at > now\(\)/)
+  const fail = pool.queries.find(({ sql }) => /last_error_code = 'LEASE_EXPIRED'/.test(sql))
+  assert.equal(fail.params[0], runId)
+})

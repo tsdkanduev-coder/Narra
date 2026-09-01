@@ -16,7 +16,8 @@ import type { NarraCharacter, NarraSceneAudioSegment } from "@/lib/narra/types";
 import { toast } from "@/lib/notifications";
 import type { RootStackParamList } from "@/navigation/RootNavigator";
 import { NATIVE_SCROLL_EDGE_EFFECTS } from "@/navigation/scroll-edge-effects";
-import { useNarraStore } from "@/stores";
+import { useBackendBook } from "@/hooks/use-backend-book";
+import { useLibraryStore, useNarraStore } from "@/stores";
 import {
   type ThemeColors,
   fontSize,
@@ -68,6 +69,11 @@ export function NarraSceneScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const displayChapter = sceneChapterTitle(chapter);
   const caption = useMemo(() => sceneCaption(excerpt), [excerpt]);
+  const book = useLibraryStore((state) => state.books.find((item) => item.id === bookId));
+  useBackendBook(book);
+  const bookEditionId = useNarraStore(
+    (state) => state.books[bookId]?.backendBinding?.bookEditionId || book?.bookEditionId,
+  );
   const characters = useNarraStore((state) => state.books[bookId]?.characters ?? EMPTY_CHARACTERS);
   const cachedScene = useNarraStore((state) => state.books[bookId]?.scenes?.[sourceKey]);
   const cachedAudio = useNarraStore((state) => state.books[bookId]?.sceneAudios?.[sourceKey]);
@@ -177,7 +183,7 @@ export function NarraSceneScreen({ route, navigation }: Props) {
     try {
       const segments: NarraSceneAudioSegment[] = cachedAudio?.segments?.length
         ? cachedAudio.segments.map((segment) => ({ ...segment }))
-        : await generateNarraAudioScenario(excerpt, characters);
+        : await generateNarraAudioScenario(excerpt, characters, bookEditionId);
       if (audioRunRef.current !== runId) return;
 
       const createdAt = cachedAudio?.createdAt ?? Date.now();
@@ -232,6 +238,7 @@ export function NarraSceneScreen({ route, navigation }: Props) {
     }
   }, [
     audioStatus,
+    bookEditionId,
     bookId,
     cachedAudio,
     characters,

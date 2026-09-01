@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   SCENE_ART_DIRECTIONS,
+  SCENE_FANART_STYLE,
   SCENE_PROVIDER_PROMPT_LIMIT,
   parseSceneJobBody,
   sceneGenerationPrompt
@@ -37,6 +38,8 @@ test('scene jobs accept structured facts and build the provider prompt on the se
   assert.match(prompt, /Родион Раскольников/)
   assert.match(prompt, /Раскольников медленно спускался/)
   assert.match(prompt, /без текста/)
+  assert.ok(prompt.includes(SCENE_FANART_STYLE))
+  assert.ok(prompt.endsWith(`Стиль: ${SCENE_FANART_STYLE}.`))
   assert.ok(prompt.length <= SCENE_PROVIDER_PROMPT_LIMIT)
 })
 
@@ -77,6 +80,7 @@ test('scene prompt keeps the main genre, character and series policy inside prov
   assert.match(prompt, /КОНТЕКСТ СЕРИИ/)
   assert.match(prompt, /Тот же художник, палитра и манера/)
   assert.match(prompt, /без текста/)
+  assert.ok(prompt.includes(SCENE_FANART_STYLE))
   assert.ok(prompt.length <= SCENE_PROVIDER_PROMPT_LIMIT)
 })
 
@@ -119,6 +123,7 @@ test('scene prompt keeps mandatory blocks for maximum valid input', () => {
   assert.match(prompt, /ПЕРСОНАЖИ/)
   assert.match(prompt, /КОНТЕКСТ СЕРИИ/)
   assert.match(prompt, /без текста/)
+  assert.ok(prompt.includes(SCENE_FANART_STYLE))
 })
 
 test('scene jobs reject raw provider controls and malformed ids', () => {
@@ -137,4 +142,22 @@ test('scene jobs reject raw provider controls and malformed ids', () => {
     characters: [],
     previous_excerpts: []
   }), /UUID v4/)
+})
+
+test('edition genre and chapter replace the empty cinematic fallback', () => {
+  const prompt = sceneGenerationPrompt({
+    bookTitle: 'Война и мир',
+    bookAuthor: 'Толстой',
+    bookDescription: '',
+    bookSubjects: ['historical-fiction'],
+    genreId: 'historical-fiction',
+    chapter: 'Пьер в салоне',
+    excerpt: 'Пьер вошёл в гостиную и остановился у двери.',
+    characters: [],
+    previousExcerpts: []
+  })
+  assert.match(prompt, /историческая проза/)
+  assert.match(prompt, /Пьер в салоне/)
+  assert.ok(prompt.includes(SCENE_FANART_STYLE))
+  assert.doesNotMatch(prompt, /кинематографичн/i)
 })

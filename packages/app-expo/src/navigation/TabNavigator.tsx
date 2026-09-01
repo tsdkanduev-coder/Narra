@@ -5,6 +5,7 @@ import { ChatsScreen } from "@/screens/ChatsScreen";
 import { LibraryScreen } from "@/screens/LibraryScreen";
 import { NotesScreen } from "@/screens/NotesScreen";
 import { ProfileScreen } from "@/screens/ProfileScreen";
+import { ReadingTabScreen } from "@/screens/ReadingTabScreen";
 import { SearchScreen } from "@/screens/SearchScreen";
 import { useTheme } from "@/styles/ThemeContext";
 import {
@@ -31,30 +32,31 @@ import { NATIVE_SCROLL_EDGE_EFFECTS } from "./scroll-edge-effects";
 export type LibraryTabStackParamList = {
   LibraryHome: { initialSection?: "catalog" | "my-books" } | undefined;
 };
-export type TabParamList = {
-  Library: NavigatorScreenParams<LibraryTabStackParamList> | undefined;
-  Chats: undefined;
-  Profile: undefined;
-  Search: undefined;
-};
+export type ReadingTabStackParamList = { ReadingHome: undefined };
 export type ChatsTabStackParamList = { ChatsHome: undefined };
-export type SearchTabStackParamList = { SearchHome: undefined };
 export type ProfileTabStackParamList = {
   ProfileHome: undefined;
   ProfileNotes: { bookId?: string } | undefined;
+  ProfileSearch: undefined;
+};
+export type TabParamList = {
+  Library: NavigatorScreenParams<LibraryTabStackParamList> | undefined;
+  Reading: undefined;
+  Chats: undefined;
+  Profile: NavigatorScreenParams<ProfileTabStackParamList> | undefined;
 };
 
 const Tab = createNativeBottomTabNavigator<TabParamList>();
 const LibraryStack = createNativeStackNavigator<LibraryTabStackParamList>();
+const ReadingStack = createNativeStackNavigator<ReadingTabStackParamList>();
 const ChatsStack = createNativeStackNavigator<ChatsTabStackParamList>();
-const SearchStack = createNativeStackNavigator<SearchTabStackParamList>();
 const ProfileStack = createNativeStackNavigator<ProfileTabStackParamList>();
 
 const TAB_ICONS = {
   Library: getFilledIconImageSource("book"),
+  Reading: getStrokeIconImageSource("book-open"),
   Chats: getFilledIconImageSource("chat-bubbles"),
   Profile: getFilledIconImageSource("person"),
-  Search: getStrokeIconImageSource("magnifying-glass"),
 } as const;
 
 function tabIcon(source: (typeof TAB_ICONS)[keyof typeof TAB_ICONS]): NativeBottomTabIcon {
@@ -121,6 +123,25 @@ function LibraryTabStackNavigator() {
   );
 }
 
+function ReadingTabStackNavigator() {
+  const { t } = useTranslation();
+  const screenOptions = useTabStackScreenOptions();
+  const largeTitleOptions = useLargeTitleOptions();
+
+  return (
+    <ReadingStack.Navigator screenOptions={screenOptions}>
+      <ReadingStack.Screen
+        name="ReadingHome"
+        component={ReadingTabScreen}
+        options={{
+          title: t("tabs.reading", "Читалка"),
+          ...largeTitleOptions,
+        }}
+      />
+    </ReadingStack.Navigator>
+  );
+}
+
 function ChatsTabStackNavigator() {
   const { t } = useTranslation();
   const screenOptions = useTabStackScreenOptions();
@@ -132,29 +153,11 @@ function ChatsTabStackNavigator() {
         name="ChatsHome"
         component={ChatsScreen}
         options={{
-          title: t("tabs.chats", "Чаты"),
+          title: t("tabs.myPath", "Мой путь"),
           ...largeTitleOptions,
         }}
       />
     </ChatsStack.Navigator>
-  );
-}
-
-function SearchTabStackNavigator() {
-  const screenOptions = useTabStackScreenOptions();
-
-  return (
-    <SearchStack.Navigator screenOptions={screenOptions}>
-      <SearchStack.Screen
-        name="SearchHome"
-        component={SearchScreen}
-        options={{
-          title: "",
-          headerTitle: "",
-          headerLargeTitleEnabled: false,
-        }}
-      />
-    </SearchStack.Navigator>
   );
 }
 
@@ -207,6 +210,15 @@ function ProfileTabStackNavigator() {
             : {
                 headerRight: () => <SyncButton size={20} color={colors.mutedForeground} />,
               }),
+        }}
+      />
+      <ProfileStack.Screen
+        name="ProfileSearch"
+        component={SearchScreen}
+        options={{
+          title: t("tabs.search", "Поиск"),
+          headerTitle: "",
+          headerLargeTitleEnabled: false,
         }}
       />
       <ProfileStack.Screen
@@ -266,7 +278,7 @@ export function TabNavigator() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.primary80,
-        tabBarLabelVisibilityMode: "unlabeled",
+        tabBarLabelVisibilityMode: "labeled",
         tabBarLabelStyle: { fontFamily: fontFamily.regular },
         tabBarStyle: Platform.OS === "ios" ? undefined : { backgroundColor: colors.background },
         tabBarBlurEffect: "systemDefault",
@@ -279,16 +291,25 @@ export function TabNavigator() {
         component={LibraryTabStackNavigator}
         options={{
           title: t("tabs.library", "Библиотека"),
-          tabBarLabel: "",
+          tabBarLabel: t("tabs.library", "Библиотека"),
           tabBarIcon: tabIcon(TAB_ICONS.Library),
+        }}
+      />
+      <Tab.Screen
+        name="Reading"
+        component={ReadingTabStackNavigator}
+        options={{
+          title: t("tabs.reading", "Читалка"),
+          tabBarLabel: t("tabs.reading", "Читалка"),
+          tabBarIcon: tabIcon(TAB_ICONS.Reading),
         }}
       />
       <Tab.Screen
         name="Chats"
         component={ChatsTabStackNavigator}
         options={{
-          title: t("tabs.chats", "Чаты"),
-          tabBarLabel: "",
+          title: t("tabs.myPath", "Мой путь"),
+          tabBarLabel: t("tabs.myPath", "Мой путь"),
           tabBarIcon: tabIcon(TAB_ICONS.Chats),
         }}
       />
@@ -297,20 +318,8 @@ export function TabNavigator() {
         component={ProfileTabStackNavigator}
         options={{
           title: t("tabs.profile", "Профиль"),
-          tabBarLabel: "",
+          tabBarLabel: t("tabs.profile", "Профиль"),
           tabBarIcon: tabIcon(TAB_ICONS.Profile),
-          tabBarMinimizeBehavior: "none",
-        }}
-      />
-      <Tab.Screen
-        name="Search"
-        component={SearchTabStackNavigator}
-        options={{
-          title: t("tabs.search", "Поиск"),
-          // iOS renders the search destination as a separate trailing control.
-          tabBarSystemItem: Platform.OS === "ios" ? "search" : undefined,
-          tabBarLabel: "",
-          tabBarIcon: tabIcon(TAB_ICONS.Search),
           tabBarMinimizeBehavior: "none",
         }}
       />

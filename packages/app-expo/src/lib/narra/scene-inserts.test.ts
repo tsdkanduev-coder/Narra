@@ -41,6 +41,21 @@ describe("sceneInsertAnchors", () => {
     expect(anchors).toEqual(["epubcfi(/6/4!/4/10)"]);
   });
 
+  it("берёт якорь из scenesByBackendId, даже если book.scenes пуст", () => {
+    const anchors = sceneInsertAnchors(
+      {},
+      undefined,
+      undefined,
+      {
+        "backend-1": scene({
+          sourceKey: "page:epubcfi(/6/8!/4/2)",
+          anchor: "epubcfi(/6/8!/4/2)",
+        }),
+      },
+    );
+    expect(anchors).toEqual(["epubcfi(/6/8!/4/2)"]);
+  });
+
   it("дедуплицирует и сортирует якоря, пустые якоря отбрасывает", () => {
     const anchors = sceneInsertAnchors({
       a: scene({ anchor: "epubcfi(/6/6!/4/2)" }),

@@ -47,8 +47,10 @@ import { generateBookCoverImage } from "@/lib/narra/media";
 import { CoverJobError } from "../narra/cover-jobs";
 import coverGenerationConfig from "./cover-generation-config.json";
 import { deleteLocalCoverJob } from "./cover-job-repository";
+import { ART_STYLE, PROMPT_CHAR_LIMIT } from "../narra/art-style";
 import {
   acknowledgeGeneratedBookCover,
+  buildFanartCoverPrompt,
   coverPrompt,
   generateBookCover,
 } from "./generate-book-cover";
@@ -58,6 +60,21 @@ beforeEach(() => {
   jobs.clear();
 });
 afterEach(() => vi.useRealTimers());
+
+describe("buildFanartCoverPrompt", () => {
+  it("fits the 950-char budget and keeps the full work-order style", () => {
+    const prompt = buildFanartCoverPrompt({
+      title: "Анна Каренина",
+      author: "Лев Толстой",
+      description: `${"Роман о семье, любви и давлении общества. ".repeat(40)}`,
+    });
+
+    expect(prompt.length).toBeLessThanOrEqual(PROMPT_CHAR_LIMIT);
+    expect(prompt).toContain(ART_STYLE);
+    expect(prompt.endsWith(`Стиль: ${ART_STYLE}.`)).toBe(true);
+    expect(prompt).toContain("Анна Каренина");
+  });
+});
 
 describe("coverPrompt", () => {
   it("builds the approved GPT Image 2 cover prompt with book context", () => {

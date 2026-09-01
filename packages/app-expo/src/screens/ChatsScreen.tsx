@@ -12,6 +12,7 @@ import { NativeSegmentedPager } from "@/components/ui/native-segmented-pager";
 import { getBookTabLabel } from "@/lib/book/book-tab-label";
 import { countRender } from "@/lib/diagnostics/interaction-performance";
 import { loadBackendCharacterMedia } from "@/lib/narra/backend-character-media";
+import { publishLiveReaderProgress } from "@/lib/narra/character-chat-progress";
 import { characterProfileText } from "@/lib/narra/character-profile";
 import {
   type ChatListModel,
@@ -76,7 +77,15 @@ const ChatsContent = memo(function ChatsContent({ model }: { model: ChatListMode
 
   const openChat = useCallback(
     (row: ChatListRow) => {
-      if (!row.unlocked) return;
+      if (!row.unlocked) {
+        navigation.navigate("NarraCharacterProfile", {
+          bookId: row.bookId,
+          characterId: row.character.id,
+        });
+        return;
+      }
+      // Читалка пишет library throttled 5 с; с «Мой путь» живой CFI раньше не публиковали.
+      publishLiveReaderProgress(row.bookId, useLibraryStore.getState().updateBook);
       navigation.navigate("NarraCharacterChat", {
         bookId: row.bookId,
         characterId: row.character.id,
@@ -202,14 +211,20 @@ const ChatsPage = memo(function ChatsPage({
       const existing = cache.get(row);
       if (existing) return existing;
       const rowKey = `${row.bookId}:${row.character.id}`;
+      const unlockPercent = Math.round(Math.max(0, Math.min(1, row.character.unlockProgress ?? 0)) * 100);
       const item: CharacterChatListItem = {
         key: rowKey,
         accessibilityLabel: `${row.character.name}, ${row.bookTitle}`,
         title: row.character.fullName || row.character.name,
-        subtitle: characterProfileText(row.character, "description"),
+        subtitle: row.unlocked
+          ? characterProfileText(row.character, "description")
+          : t("narra.lockedCharacterProgressHint", "откроется на {{percent}}%", {
+              percent: unlockPercent,
+            }),
+        dimmed: !row.unlocked,
         onPress: () => onOpenChat(row),
         avatar: (
-          <CharacterChatAvatar>
+          <CharacterChatAvatar muted={!row.unlocked}>
             <CharacterPortraitImage
               character={row.character}
               resizeMode="cover"
@@ -230,7 +245,7 @@ const ChatsPage = memo(function ChatsPage({
       cache.set(row, item);
       return item;
     };
-  }, [onOpenChat]);
+  }, [onOpenChat, t]);
   const items = useMemo(() => {
     countRender("chats.page.build");
     return [narraItem, ...rows.map(itemForRow)];

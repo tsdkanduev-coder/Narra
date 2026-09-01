@@ -10,9 +10,14 @@ import { InitialsAvatar } from "@/components/ui/initials-avatar";
 import { useBackendBook } from "@/hooks/use-backend-book";
 import { type NarraChatMessageInput, completeNarraChat } from "@/lib/ai/narra-chat";
 import { recordTelemetry } from "@/lib/analytics/telemetry";
+import {
+  type CharacterPromptLocation,
+  formatCharacterPromptLocation,
+  resolveCharacterPromptContext,
+} from "@/lib/narra/character-chat-progress";
 import { normalizeCharacterChatPlaceholder } from "@/lib/narra/chat-placeholder";
 import { isCharacterUnlocked, normalizeReadingProgress } from "@/lib/narra/domain";
-import { reportNarraError } from "@/lib/narra/errors";
+import { emptyBookSearchCode, reportNarraError, searchNotReadyCode } from "@/lib/narra/errors";
 import type { NarraCharacter, NarraChatMessage } from "@/lib/narra/types";
 import { toast } from "@/lib/notifications";
 import type { RootStackParamList } from "@/navigation/RootNavigator";
@@ -53,8 +58,10 @@ export function buildCharacterSystemPrompt(
   progress: number,
   memory: string,
   language: "ru" | "en" = "ru",
+  location?: CharacterPromptLocation,
 ): string {
   const safeProgress = normalizeReadingProgress(progress);
+  const locationLine = formatCharacterPromptLocation(language, location);
   if (language === "en") {
     return `You are ${character.fullName} from “${title}”. Stay completely in character.
 Traits: ${character.traits.join(", ")}.
@@ -62,7 +69,7 @@ Role: ${character.role}.
 Speaking style: ${character.speechStyle}.
 Reply in English, in the first person, naturally, usually in 1–3 sentences. Never say that you are an AI, a model, or a book character.
 Avoid lists and corporate language. React to the reader's actual words; you may disagree, joke, and ask questions.
-The reader has completed about ${Math.round(safeProgress * 100)}% of the book. Do not reveal events, knowledge, relationships, or character fates beyond that point. If a question risks a spoiler, gently deflect in character and return to events the reader already knows without mentioning rules or restrictions.
+The reader has completed about ${Math.round(safeProgress * 100)}% of the book.${locationLine ? ` ${locationLine}` : ""} Do not reveal events, knowledge, relationships, or character fates beyond that point. If a question risks a spoiler, gently deflect in character and return to events the reader already knows without mentioning rules or restrictions.
 You may evade, but do not lie. Speak honestly about events the reader has already reached and do not invent facts that are not in the book.
 ${memory ? `Your long-term memory of the reader:\n${memory}` : ""}`;
   }
@@ -72,7 +79,7 @@ ${memory ? `Your long-term memory of the reader:\n${memory}` : ""}`;
 Манера речи: ${character.speechStyle}.
 Отвечай от первого лица, живо, обычно 1–3 предложениями. Не говори, что ты ИИ, модель или персонаж книги.
 Не используй списки и канцелярит. Реагируй на конкретные слова собеседника, можешь спорить, шутить и задавать вопросы.
-Читатель прошёл примерно ${Math.round(safeProgress * 100)}% книги. Не раскрывай события, знания, отношения и судьбы героев дальше этого прогресса. Если вопрос ведёт к спойлеру, мягко уклонись в своём характере и переведи разговор к уже известным событиям — не упоминай правила или ограничения.
+Читатель прошёл примерно ${Math.round(safeProgress * 100)}% книги.${locationLine ? ` ${locationLine}` : ""} Не раскрывай события, знания, отношения и судьбы героев дальше этого прогресса. Если вопрос ведёт к спойлеру, мягко уклонись в своём характере и переведи разговор к уже известным событиям — не упоминай правила или ограничения.
 Уклоняться можно, лгать нельзя. О том, что читатель уже прошёл, говори честно: не отрицай своих поступков и событий книги, даже если герою неприятно о них вспоминать. Не выдумывай того, чего в книге нет.
 ${memory ? `Твоя долговременная память о собеседнике:\n${memory}` : ""}`;
 }
@@ -123,6 +130,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
   const greetingRequestedRef = useRef(false);
   const placeholderRequestedRef = useRef<string | null>(null);
   const unlocked = Boolean(book && character && isCharacterUnlocked(book.progress, character));
+  const bookEditionId = narraBook?.backendBinding?.bookEditionId || book?.bookEditionId;
   const characterStatus =
     sending || greetingLoading
       ? t("narra.characterTyping", "Печатает...")
@@ -153,6 +161,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
 
   useEffect(() => {
     if (interfaceLanguage === "en" || !book || !character || character.chatPlaceholder) return;
+    if (!bookEditionId) return;
     if (placeholderRequestedRef.current === character.id) return;
     placeholderRequestedRef.current = character.id;
 
@@ -174,6 +183,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
           purpose: "character_chat",
           origin: "background",
           analyticsTier: "none",
+          bookEditionId,
         });
         const placeholder = normalizeCharacterChatPlaceholder(completion);
         if (placeholder) updateCharacter(bookId, characterId, { chatPlaceholder: placeholder });
@@ -182,27 +192,26 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
         reportNarraError("character_chat_placeholder", error);
       }
     })();
-  }, [book, bookId, character, characterId, interfaceLanguage, updateCharacter]);
+  }, [book, bookEditionId, bookId, character, characterId, interfaceLanguage, updateCharacter]);
 
-  const conversation = useMemo<NarraChatMessageInput[]>(
-    () =>
-      character && book
-        ? [
-            {
-              role: "system",
-              content: buildCharacterSystemPrompt(
-                character,
-                book.meta.title,
-                book.progress,
-                memory,
-                interfaceLanguage,
-              ),
-            },
-            ...messages.slice(-18).map(({ role, content }) => ({ role, content })),
-          ]
-        : [],
-    [book, character, interfaceLanguage, memory, messages],
-  );
+  const conversation = useMemo<NarraChatMessageInput[]>(() => {
+    if (!character || !book) return [];
+    const { progress, location } = resolveCharacterPromptContext(bookId, book);
+    return [
+      {
+        role: "system",
+        content: buildCharacterSystemPrompt(
+          character,
+          book.meta.title,
+          progress,
+          memory,
+          interfaceLanguage,
+          location,
+        ),
+      },
+      ...messages.slice(-18).map(({ role, content }) => ({ role, content })),
+    ];
+  }, [book, bookId, character, interfaceLanguage, memory, messages]);
 
   const chatMessages = useMemo(() => {
     const threadId = `narra-character-${bookId}-${characterId}`;
@@ -232,10 +241,15 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
       appendGreeting(character.greeting);
       return;
     }
+    if (!bookEditionId) {
+      greetingRequestedRef.current = false;
+      return;
+    }
 
     setGreetingLoading(true);
     void (async () => {
       try {
+        const { progress, location } = resolveCharacterPromptContext(bookId, book);
         const content = await completeNarraChat({
           messages: [
             {
@@ -243,9 +257,10 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
               content: buildCharacterSystemPrompt(
                 character,
                 book.meta.title,
-                book.progress,
+                progress,
                 "",
                 interfaceLanguage,
+                location,
               ),
             },
             {
@@ -260,6 +275,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
           purpose: "character_chat",
           origin: "user",
           analyticsTier: "essential",
+          bookEditionId,
         });
         if (content) appendGreeting(content);
       } catch (error) {
@@ -270,7 +286,16 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
         setGreetingLoading(false);
       }
     })();
-  }, [book, bookId, character, characterId, interfaceLanguage, messages.length, unlocked]);
+  }, [
+    book,
+    bookEditionId,
+    bookId,
+    character,
+    characterId,
+    interfaceLanguage,
+    messages.length,
+    unlocked,
+  ]);
 
   const refreshMemory = useCallback(
     async (updatedMessages: NarraChatMessage[]) => {
@@ -313,6 +338,15 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
     async (value: string) => {
       const text = value.trim();
       if (!text || !book || !character || !unlocked || sending) return;
+      if (!bookEditionId) {
+        toast.error(t("chat.searchNotReady", "Книга ещё не готова к разговору"), {
+          description: t(
+            "chat.searchNotReadyMessage",
+            "Поиск по книге ещё не готов. Ответ без книги недоступен.",
+          ),
+        });
+        return;
+      }
       setSending(true);
       const userMessage: NarraChatMessage = {
         id: Crypto.randomUUID(),
@@ -329,6 +363,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
           purpose: "character_chat",
           origin: "user",
           analyticsTier: "essential",
+          bookEditionId,
         });
         const assistantMessage: NarraChatMessage = {
           id: assistantMessageId,
@@ -339,9 +374,29 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
         append(bookId, characterId, assistantMessage);
         void refreshMemory([...messages, userMessage, assistantMessage]);
       } catch (error) {
-        toast.error(t("narra.chatFailedTitle", "Не удалось получить ответ"), {
-          description: reportNarraError("character_chat", error).message,
-        });
+        const normalized = reportNarraError("character_chat", error);
+        const readyCode = searchNotReadyCode(error) || searchNotReadyCode(normalized);
+        const emptyCode = emptyBookSearchCode(error) || emptyBookSearchCode(normalized);
+        toast.error(
+          readyCode
+            ? t("chat.searchNotReady", "Книга ещё не готова к разговору")
+            : emptyCode
+              ? t("chat.searchEmpty", "Ничего не найдено")
+              : t("narra.chatFailedTitle", "Не удалось получить ответ"),
+          {
+            description: readyCode
+              ? t(
+                  "chat.searchNotReadyMessage",
+                  "Поиск по книге ещё не готов. Ответ без книги недоступен.",
+                )
+              : emptyCode
+                ? t(
+                    "chat.searchEmptyMessage",
+                    "По книге нет фрагментов для ответа. Ответ без книги недоступен.",
+                  )
+                : normalized.message,
+          },
+        );
       } finally {
         setSending(false);
       }
@@ -349,6 +404,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
     [
       append,
       book,
+      bookEditionId,
       bookId,
       character,
       characterId,

@@ -29,7 +29,7 @@ const scene = (anchor: string, backendScene: BackendSceneIntent): NarraSceneImag
 });
 
 describe("canonical backend scene state", () => {
-  it("stores one asset and one deterministic anchor for duplicate scene keys", () => {
+  it("stores one asset and keeps every tapped CFI bound to it", () => {
     let book = emptyNarraBookState("book");
     book = withBackendSceneAsset(
       book,
@@ -46,10 +46,13 @@ describe("canonical backend scene state", () => {
     book = duplicate.book;
 
     expect(Object.keys(book.scenesByBackendId ?? {})).toHaveLength(1);
-    expect(book.sceneAnchorBindings).toEqual({ "a-anchor": expect.any(String) });
-    expect(duplicate.change.removedAnchors).toContain("z-anchor");
+    expect(book.sceneAnchorBindings).toEqual({
+      "a-anchor": expect.any(String),
+      "z-anchor": expect.any(String),
+    });
+    expect(duplicate.change.removedAnchors).toEqual([]);
     expect(backendSceneForAnchor(book, "a-anchor")?.imageUri).toBe("file:///a-anchor.png");
-    expect(backendSceneForAnchor(book, "z-anchor")).toBeUndefined();
+    expect(backendSceneForAnchor(book, "z-anchor")?.imageUri).toBe("file:///a-anchor.png");
   });
 
   it("keeps distinct scene keys and markup revisions separate", () => {

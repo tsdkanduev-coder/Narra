@@ -1,3 +1,4 @@
+import { budgetPrompt } from "@/lib/narra/art-style";
 import { generateBookCoverImage } from "@/lib/narra/media";
 import { generateId } from "@readany/core/utils";
 import {
@@ -73,6 +74,27 @@ export function coverPrompt(input: {
     (prompt, [placeholder, value]) => prompt.replaceAll(placeholder, value),
     COVER_PROMPT_TEMPLATE,
   );
+}
+
+/**
+ * Fanart-обложка в каноне work order: тот же ART_STYLE, бюджет 950.
+ * Каталожный `coverPrompt` остаётся отдельным GPT Image-пайплайном
+ * (типографика названия) — его контракт не ломаем.
+ */
+export function buildFanartCoverPrompt(input: {
+  title: string;
+  author?: string;
+  description?: string;
+}): string {
+  const title = input.title.trim() || "Untitled book";
+  const author = input.author?.trim();
+  const theme = input.description?.trim();
+  return budgetPrompt([
+    `Обложка книги «${title}».`,
+    author ? `Автор: ${author}.` : "",
+    theme ? `Тема: ${theme}` : "",
+    "Вертикальная книжная обложка, единая серия с портретами и сценами героев. Без текста и надписей на изображении.",
+  ]);
 }
 
 async function runBookCoverJob(input: {

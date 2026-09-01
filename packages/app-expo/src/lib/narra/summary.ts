@@ -1,4 +1,5 @@
 import { narraGatewayRequest } from "@/lib/ai/narra-gateway-fetch";
+import { NarraServiceError } from "./errors";
 
 const MAX_SUMMARY_SOURCE_CHARS = 30_000;
 type SummaryResponse = { text?: string; content?: string; error?: string };
@@ -7,11 +8,23 @@ export async function generateNarraSummary(
   chapter: string,
   excerpt: string,
   language: "ru" | "en" = "ru",
+  bookEditionId?: string,
 ): Promise<string> {
+  const edition = typeof bookEditionId === "string" ? bookEditionId.trim() : "";
+  if (!edition) {
+    throw new NarraServiceError(
+      "SERVICE",
+      "Поиск по книге ещё не готов (SEARCH_NOT_READY). Ответ без книги недоступен.",
+      undefined,
+      undefined,
+      "SEARCH_NOT_READY",
+    );
+  }
   const response = await narraGatewayRequest("/v2/ai/chat/complete", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      book_edition_id: edition,
       messages: [
         {
           role: "system",

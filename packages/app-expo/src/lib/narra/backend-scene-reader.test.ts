@@ -155,6 +155,39 @@ describe("reader backend scene action and persistence", () => {
     expect(state().scenes).toEqual({});
     expect(action.display).not.toHaveBeenCalled();
   });
+  it("keeps the tapped CFI bound and displays the image there when the same sceneKey already has a canonical anchor", async () => {
+    const first = { ...input(), anchor: "cfi-a", sourceKey: "page:cfi-a" };
+    await generateBackendReaderScene(first, new AbortController().signal);
+    expect(first.display).toHaveBeenCalledWith("cfi-a", "data:image/png;base64,aW1hZ2U=");
+    expect(first.remove).not.toHaveBeenCalled();
+
+    const second = { ...input(), anchor: "cfi-b", sourceKey: "page:cfi-b" };
+    await generateBackendReaderScene(second, new AbortController().signal);
+    expect(second.remove).not.toHaveBeenCalled();
+    expect(second.display).toHaveBeenCalledWith("cfi-b", "data:image/png;base64,aW1hZ2U=");
+    expect(second.display).toHaveBeenCalledWith("cfi-a", "data:image/png;base64,aW1hZ2U=");
+    const id = Object.keys(state().scenesByBackendId ?? {})[0];
+    expect(state().sceneAnchorBindings).toEqual({ "cfi-a": id, "cfi-b": id });
+    expect(sceneInsertAnchors(state().scenes, state().sceneRequests, state().sceneAnchorBindings)).toEqual(
+      ["cfi-a", "cfi-b"],
+    );
+  });
+  it("after persist/reload the tapped non-canonical CFI still restores instead of staying on Рисуем", async () => {
+    await generateBackendReaderScene(
+      { ...input(), anchor: "cfi-a", sourceKey: "page:cfi-a" },
+      new AbortController().signal,
+    );
+    await generateBackendReaderScene(
+      { ...input(), anchor: "cfi-b", sourceKey: "page:cfi-b" },
+      new AbortController().signal,
+    );
+    useNarraStore.setState({ books: JSON.parse(JSON.stringify(useNarraStore.getState().books)) });
+    const book = state();
+    expect(book.sceneAnchorBindings?.["cfi-b"]).toBe(book.sceneAnchorBindings?.["cfi-a"]);
+    expect(
+      sceneInsertAnchors(book.scenes, book.sceneRequests, book.sceneAnchorBindings, book.scenesByBackendId),
+    ).toEqual(["cfi-a", "cfi-b"]);
+  });
   it("keeps references for a no-op intent update and strips extra response fields", () => {
     const action = input();
     const request = { ...action.intent, imageUrl: ready.image_url };

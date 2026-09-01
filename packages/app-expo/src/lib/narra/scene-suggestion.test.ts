@@ -40,8 +40,8 @@ function run(
 }
 
 describe("настройка частоты врезок", () => {
-  it("дефолт — 4 страницы, варианты 3/4/8/выкл", () => {
-    expect(DEFAULT_SCENE_SUGGESTION_INTERVAL).toBe(4);
+  it("дефолт — 8 страниц, варианты 3/4/8/выкл", () => {
+    expect(DEFAULT_SCENE_SUGGESTION_INTERVAL).toBe(8);
     expect(SCENE_SUGGESTION_INTERVALS).toEqual([3, 4, 8, 0]);
     expect(SCENE_SUGGESTION_INTERVALS).toContain(DEFAULT_SCENE_SUGGESTION_INTERVAL);
   });

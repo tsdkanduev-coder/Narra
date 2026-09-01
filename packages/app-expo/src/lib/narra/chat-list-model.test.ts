@@ -60,7 +60,8 @@ describe("chat list model", () => {
       { a, b: state("b", [character("b")]) },
     );
     expect(model.books.map((item) => item.id)).toEqual(["b", "a"]);
-    expect(model.allRows.map((row) => row.character.id)).toEqual(["b", "first", "active"]);
+    expect(model.allRows.map((row) => row.character.id)).toEqual(["b", "first", "active", "locked"]);
+    expect(model.allRows.find((row) => row.character.id === "locked")?.unlocked).toBe(false);
   });
 
   it("retains the exact model for no-op and unrelated metadata updates", () => {
@@ -157,25 +158,29 @@ describe("chat list model", () => {
     expect(select(books, { a: { ...a, chats: { a: [message("2")] } } })).toBe(first);
   });
 
-  it("never seeds profiles from titles or exposes legacy local profiles", () => {
+  it("never seeds profiles from titles, but keeps private and locked heroes", () => {
     const select = createChatListSelector();
     expect(select([book("a")], {}).allRows).toEqual([]);
-    expect(
-      select([book("a")], { a: state("a", [{ ...character("legacy"), backendManaged: false }]) })
-        .allRows,
-    ).toEqual([]);
+    const privateLocked = select([book("a", { progress: 0 })], {
+      a: state("a", [{ ...character("legacy", 0.8), backendManaged: false }]),
+    }).allRows;
+    expect(privateLocked).toHaveLength(1);
+    expect(privateLocked[0]?.unlocked).toBe(false);
+    expect(privateLocked[0]?.character.backendManaged).toBe(false);
   });
 
-  it("keeps pages with locked characters and unlocks rows when progress changes", () => {
+  it("keeps locked rows grey and unlocks them when progress changes", () => {
     const select = createChatListSelector();
     const books = [book("a", { progress: 0 })];
     const narraBooks = { a: state("a", [character("a", 0.5)]) };
     const first = select(books, narraBooks);
     expect(first.books).toHaveLength(1);
-    expect(first.allRows).toHaveLength(0);
+    expect(first.allRows).toHaveLength(1);
+    expect(first.allRows[0]?.unlocked).toBe(false);
     const next = select([{ ...books[0], progress: 0.5 }], narraBooks);
     expect(next.books).toBe(first.books);
     expect(next.allRows).toHaveLength(1);
+    expect(next.allRows[0]?.unlocked).toBe(true);
   });
 
   it("reorders existing pages without rebuilding them and removes deleted books", () => {

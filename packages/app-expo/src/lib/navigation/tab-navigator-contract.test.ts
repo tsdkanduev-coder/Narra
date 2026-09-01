@@ -7,16 +7,19 @@ const navigator = readFileSync(
 );
 
 describe("native tab navigator contract", () => {
-  it("keeps search as a separate iOS control with a custom icon and no labels", () => {
-    const searchTab = navigator.slice(
-      navigator.indexOf('name="Search"'),
-      navigator.indexOf("</Tab.Navigator>"),
-    );
-
-    expect(navigator).toContain('tabBarLabelVisibilityMode: "unlabeled"');
-    expect(navigator.match(/tabBarLabel: ""/g)).toHaveLength(4);
-    expect(searchTab).toContain('tabBarLabel: ""');
-    expect(searchTab).toContain("tabBarIcon: tabIcon(TAB_ICONS.Search)");
-    expect(searchTab).toContain('tabBarSystemItem: Platform.OS === "ios" ? "search" : undefined');
+  it("keeps four labeled tabs Library / Reading / My path / Profile and search in the Profile stack", () => {
+    expect(navigator).toContain('tabBarLabelVisibilityMode: "labeled"');
+    expect(navigator).toContain('name="Library"');
+    expect(navigator).toContain('name="Reading"');
+    expect(navigator).toContain("ReadingTabScreen");
+    expect(navigator).toContain('name="Chats"');
+    expect(navigator).toContain('name="Profile"');
+    expect(navigator).toContain('name="ProfileSearch"');
+    expect(navigator).toContain('t("tabs.reading", "Читалка")');
+    expect(navigator).toContain('t("tabs.myPath", "Мой путь")');
+    expect(navigator).toContain('getStrokeIconImageSource("book-open")');
+    expect(navigator).not.toContain('tabBarLabel: ""');
+    expect(navigator).not.toContain("tabBarSystemItem");
+    expect(navigator).not.toMatch(/name="Search"/);
   });
 });

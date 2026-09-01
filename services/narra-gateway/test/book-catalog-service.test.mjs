@@ -516,6 +516,46 @@ test('catalog progress never queues legacy v2 character bundles', async () => {
   assert.deepEqual(result.warmup, { requested: 0, ready: 0, pending: 0, failed: 0 })
 })
 
+test('progress with analysis repository queues charactersDue without a v3 cutoff', async () => {
+  const ensured = []
+  const service = createBookCatalogService({
+    repository: repository({
+      async advanceReaderPosition() {
+        return {
+          scope: 'private',
+          analysisVersion: 'book-markup-v2',
+          readerTextOffset: 90,
+          readingFraction: 0.09,
+          chapterKey: 'chapter-2',
+          charactersDue: [{
+            characterKey: 'character:hero',
+            warmupTextOffset: 80,
+            firstAppearanceTextOffset: 120
+          }]
+        }
+      },
+      async ensureCharacterBundle(input) {
+        ensured.push(input)
+        return { status: 'queued' }
+      }
+    }),
+    analysisRepository: {
+      async ensureLatestMediaProjection() { return { projected: true } }
+    }
+  })
+
+  const result = await service.advanceProgress('reader-1', 'book-1', {
+    progressFraction: 0.09,
+    textOffset: null,
+    chapterKey: 'chapter-2'
+  })
+
+  assert.equal(ensured.length, 1)
+  assert.equal(ensured[0].characterKey, 'character:hero')
+  assert.equal(ensured[0].bundleVersion, 'character-bundle-v3')
+  assert.deepEqual(result.warmup, { requested: 1, ready: 0, pending: 1, failed: 0 })
+})
+
 test('canonical v3 progress queues media for characters behind the warmup frontier', async () => {
   const ensured = []
   const service = createBookCatalogService({
@@ -595,6 +635,82 @@ test('canonical progress extends durable scene prefetch from the server position
   assert.deepEqual(result.sceneWarmup, { requested: 2, ready: 1, pending: 1, failed: 0 })
 })
 
+test('advanceProgress fills normalized text for prefetch when analysis columns are empty', async () => {
+  const sourceText = 'Анна открыла дверь и вошла в зал.'
+  const sourceBytes = Buffer.from(sourceText, 'utf8')
+  const sourceHash = createHash('sha256').update(sourceBytes).digest('hex')
+  const textHash = createHash('sha256').update(sourceText).digest('hex')
+  const calls = []
+  const service = createBookCatalogService({
+    repository: repository({
+      async advanceReaderPosition() {
+        return {
+          scope: 'private',
+          analysisVersion: 'book-markup-v3',
+          readerTextOffset: 10,
+          readingFraction: 0.1,
+          chapterKey: 'chapter-1',
+          charactersDue: []
+        }
+      },
+      async getNormalizedSceneText() { return null },
+      async getAccessibleBookFile() {
+        return {
+          objectKey: 'books/private/book-1/source.txt',
+          mimeType: 'text/plain',
+          byteSize: sourceBytes.byteLength,
+          contentHash: sourceHash,
+          format: 'txt'
+        }
+      },
+      async saveNormalizedSceneText(input) {
+        calls.push(['save', input])
+        return { runId: 'run-1' }
+      },
+      async ensureBookScenesThrough(input) {
+        calls.push(['prefetch', input])
+        return { requested: 1, ready: 0, pending: 1, failed: 0 }
+      }
+    }),
+    analysisRepository: {
+      async ensureLatestMediaProjection() { return { projected: true } }
+    },
+    storage: {
+      async getBytes({ objectKey }) {
+        calls.push(['get', objectKey])
+        return { bytes: sourceBytes }
+      },
+      async putBytes(input) {
+        calls.push(['put', input.objectKey])
+        return {
+          objectKey: input.objectKey,
+          contentHash: createHash('sha256').update(input.bytes).digest('hex')
+        }
+      }
+    }
+  })
+
+  const result = await service.advanceProgress('reader-1', 'book-1', {
+    progressFraction: 0.1,
+    textOffset: null,
+    chapterKey: 'chapter-1'
+  })
+  assert.deepEqual(calls.find(([name]) => name === 'prefetch')?.[1], {
+    subjectId: 'reader-1',
+    bookEditionId: 'book-1',
+    readerTextOffset: 10,
+    normalizedTextObjectKey: 'analysis/ondemand/book-1/normalized-text-v1.txt',
+    normalizedTextHash: textHash
+  })
+  assert.deepEqual(calls.find(([name]) => name === 'save')?.[1], {
+    bookEditionId: 'book-1',
+    objectKey: 'analysis/ondemand/book-1/normalized-text-v1.txt',
+    contentHash: textHash,
+    textLength: sourceText.length
+  })
+  assert.deepEqual(result.sceneWarmup, { requested: 1, ready: 0, pending: 1, failed: 0 })
+})
+
 test('scene lookup returns a signed ready asset and never accepts scene text from the client', async () => {
   const calls = []
   const service = createBookCatalogService({
@@ -632,6 +748,115 @@ test('scene lookup returns a signed ready asset and never accepts scene text fro
   assert.equal(result.status, 'ready')
   assert.equal(result.imageUrl, 'https://storage/scene')
   assert.equal(calls[1][0], 'sign')
+})
+
+test('sceneAt fills normalized text from the book file when analysis columns are empty', async () => {
+  const sourceText = 'Анна открыла дверь и вошла в зал.'
+  const sourceBytes = Buffer.from(sourceText, 'utf8')
+  const sourceHash = createHash('sha256').update(sourceBytes).digest('hex')
+  const textHash = createHash('sha256').update(sourceText).digest('hex')
+  const calls = []
+  const service = createBookCatalogService({
+    repository: repository({
+      async getNormalizedSceneText() { return null },
+      async getAccessibleBookFile() {
+        return {
+          objectKey: 'books/private/book-1/source.txt',
+          mimeType: 'text/plain',
+          byteSize: sourceBytes.byteLength,
+          contentHash: sourceHash,
+          format: 'txt'
+        }
+      },
+      async saveNormalizedSceneText(input) {
+        calls.push(['save', input])
+        return { runId: 'run-1' }
+      },
+      async ensureReaderBookScene(input) {
+        calls.push(['resolve', input])
+        return {
+          status: 'queued',
+          sceneKey: 'text-interval-v1:0',
+          slotIndex: 0,
+          anchorTextOffset: 0
+        }
+      }
+    }),
+    storage: {
+      async getBytes({ objectKey }) {
+        calls.push(['get', objectKey])
+        return { bytes: sourceBytes }
+      },
+      async putBytes(input) {
+        calls.push(['put', input.objectKey])
+        return {
+          objectKey: input.objectKey,
+          contentHash: createHash('sha256').update(input.bytes).digest('hex')
+        }
+      },
+      async createDownload() {
+        throw new Error('must not sign a queued scene')
+      }
+    }
+  })
+
+  const result = await service.sceneAt('reader-1', 'book-1', {
+    readerTextOffset: 10,
+    progressFraction: null
+  })
+  assert.equal(result.status, 'queued')
+  assert.deepEqual(calls.find(([name]) => name === 'resolve')?.[1], {
+    subjectId: 'reader-1',
+    bookEditionId: 'book-1',
+    readerTextOffset: 10,
+    progressFraction: null,
+    normalizedTextObjectKey: 'analysis/ondemand/book-1/normalized-text-v1.txt',
+    normalizedTextHash: textHash
+  })
+  assert.deepEqual(calls.find(([name]) => name === 'save')?.[1], {
+    bookEditionId: 'book-1',
+    objectKey: 'analysis/ondemand/book-1/normalized-text-v1.txt',
+    contentHash: textHash,
+    textLength: sourceText.length
+  })
+})
+
+test('sceneAt reuses prepared normalized text and does not re-extract the book file', async () => {
+  const calls = []
+  const service = createBookCatalogService({
+    repository: repository({
+      async getNormalizedSceneText() {
+        return {
+          objectKey: 'analysis/run-2/normalized-text-v1.txt',
+          contentHash: HASH
+        }
+      },
+      async getAccessibleBookFile() {
+        throw new Error('must not open the source file')
+      },
+      async ensureReaderBookScene(input) {
+        calls.push(input)
+        return {
+          status: 'queued',
+          sceneKey: 'text-interval-v1:0',
+          slotIndex: 0,
+          anchorTextOffset: 0
+        }
+      }
+    }),
+    storage: {
+      async getBytes() { throw new Error('must not download') },
+      async putBytes() { throw new Error('must not upload') }
+    }
+  })
+
+  const result = await service.sceneAt('reader-1', 'book-1', {
+    readerTextOffset: 10,
+    progressFraction: null
+  })
+  assert.equal(result.status, 'queued')
+  assert.equal(calls[0].normalizedTextObjectKey, 'analysis/run-2/normalized-text-v1.txt')
+  assert.equal(calls[0].normalizedTextHash, HASH)
 })
 
 test('local hash reuses a ready catalog edition and otherwise requests local registration', async () => {

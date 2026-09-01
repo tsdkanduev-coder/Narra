@@ -1,9 +1,10 @@
 import { NativeButton } from "@/components/ui/NativeButton";
 import { Text } from "@/components/ui/Typography";
+import { useBackendBook } from "@/hooks/use-backend-book";
 import { reportNarraError } from "@/lib/narra/errors";
 import { generateNarraSummary } from "@/lib/narra/summary";
 import type { RootStackParamList } from "@/navigation/RootNavigator";
-import { useNarraStore } from "@/stores";
+import { useLibraryStore, useNarraStore } from "@/stores";
 import { fontSize, fontWeight, spacing, useColors } from "@/styles/theme";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +19,11 @@ export function NarraSummaryScreen({ route }: Props) {
   const { t, i18n } = useTranslation();
   const interfaceLanguage = i18n.resolvedLanguage === "en" ? "en" : "ru";
   const localizedSourceKey = `${sourceKey}:${interfaceLanguage}`;
+  const book = useLibraryStore((state) => state.books.find((item) => item.id === bookId));
+  useBackendBook(book);
+  const bookEditionId = useNarraStore(
+    (state) => state.books[bookId]?.backendBinding?.bookEditionId || book?.bookEditionId,
+  );
   const cachedSummary = useNarraStore(
     (state) => state.books[bookId]?.summaries?.[localizedSourceKey],
   );
@@ -32,7 +38,12 @@ export function NarraSummaryScreen({ route }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const text = await generateNarraSummary(chapter, excerpt, interfaceLanguage);
+      const text = await generateNarraSummary(
+        chapter,
+        excerpt,
+        interfaceLanguage,
+        bookEditionId,
+      );
       setLocalSummary(text);
       setSummary(bookId, {
         sourceKey: localizedSourceKey,
@@ -46,13 +57,23 @@ export function NarraSummaryScreen({ route }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [bookId, chapter, excerpt, interfaceLanguage, loading, localizedSourceKey, setSummary]);
+  }, [
+    bookEditionId,
+    bookId,
+    chapter,
+    excerpt,
+    interfaceLanguage,
+    loading,
+    localizedSourceKey,
+    setSummary,
+  ]);
 
   useEffect(() => {
     if (startedRef.current || summary) return;
+    if (!bookEditionId) return;
     startedRef.current = true;
     void generate();
-  }, [generate, summary]);
+  }, [bookEditionId, generate, summary]);
 
   return (
     <ScrollView
