@@ -61,3 +61,63 @@ describe("Narra scene audio", () => {
     });
   });
 });
+
+describe("Narra scene audio — резолв героя по словоформам", () => {
+  const raskolnikov: NarraCharacter = {
+    id: "character:abc",
+    name: "Раскольников",
+    fullName: "Родион Романович Раскольников",
+    aliases: ["Родя"],
+    role: "Бывший студент",
+    gender: "male",
+    voice: "She",
+    traits: [],
+    speechStyle: "",
+    speechExamples: [],
+    appearancePrompt: "",
+    unlockProgress: 0,
+  };
+  const sonya: NarraCharacter = {
+    ...raskolnikov,
+    id: "character:def",
+    name: "Соня",
+    fullName: "Софья Семёновна Мармеладова",
+    aliases: [],
+    gender: "female",
+    voice: "Che",
+  };
+
+  it("не отдаёт реплику рассказчику, если модель назвала героя не по id", () => {
+    const segments = parseNarraAudioScenario(
+      JSON.stringify([
+        { type: "speech", character: "Раскольникова", text: "Я бывший студент." },
+        { type: "speech", character: "Родя", text: "Оставь меня." },
+        { type: "speech", character: "Мармеладова", text: "Что вы сделали?" },
+        { type: "speech", character: "Родион Романович", text: "Ничего." },
+      ]),
+      [raskolnikov, sonya],
+    );
+
+    expect(segments.map((segment) => segment.speaker)).toEqual([
+      "Раскольников",
+      "Раскольников",
+      "Соня",
+      "Раскольников",
+    ]);
+    expect(segments.map((segment) => segment.voice)).toEqual(["She", "She", "Che", "She"]);
+  });
+
+  it("оставляет рассказчика, когда имя двусмысленно или незнакомо", () => {
+    const twin: NarraCharacter = { ...sonya, id: "character:twin", name: "Мармеладов" };
+    const segments = parseNarraAudioScenario(
+      JSON.stringify([
+        { type: "speech", character: "Мармеладов", text: "Милостивый государь…" },
+        { type: "speech", character: "Незнакомец", text: "Кто здесь?" },
+      ]),
+      [raskolnikov, sonya, twin],
+    );
+
+    expect(segments[0]?.speaker).toBe("Мармеладов");
+    expect(segments[1]?.speaker).toBe("Рассказчик");
+  });
+});

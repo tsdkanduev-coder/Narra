@@ -16,7 +16,13 @@ describe("square scene contract", () => {
     expect(render).toContain("doc.createElement('canvas')");
     expect(render).toContain("box.setAttribute('role', 'status')");
     expect(render).toContain("box.setAttribute('aria-label', _sceneSlotLabels.loading)");
-    expect(render).not.toContain("createTextNode");
+    // Во время генерации в квадрате нет текста; подпись есть только у
+    // неактивного слота (бэкенд ещё готовит разметку).
+    const loadingBranch = render
+      .split("if (state === 'loading') {")[1]
+      .split("} else if (inert)")[0];
+    expect(loadingBranch).not.toContain("createTextNode");
+    expect(render).toContain("note.className = 'readany-scene-disabled'");
     expect(render).not.toContain("loadingHint");
     expect(template).not.toContain("NARRA_LOADER_SVG");
     expect(render.match(/appendSceneFlowBorder\(box\)/g)).toHaveLength(1);
@@ -105,9 +111,7 @@ describe("square scene contract", () => {
     expect(template).toContain("'  border-radius: 9999px !important;'");
     expect(template).toContain("icon.setAttribute('data-icon', 'inline-start')");
     expect(template).toContain(".readany-scene-action:focus-visible");
-    expect(template).toContain(
-      "if (_sceneSlotsEnabled) appendSceneAction(box, _sceneSlotLabels.idle)",
-    );
+    expect(template).toContain("appendSceneAction(box, _sceneSlotLabels.idle)");
     expect(template).toContain("action.style.setProperty('width', 'auto', 'important')");
   });
 

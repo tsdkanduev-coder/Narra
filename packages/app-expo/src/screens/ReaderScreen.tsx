@@ -695,6 +695,9 @@ function ReaderContent({ route, navigation }: Props) {
     backendBookEditionId || book?.bookEditionId,
     backendBookStatus?.manifest?.availability,
   );
+  // Снимок для обработчиков WebView (onRelocate живёт вне рендера).
+  const backendSceneEnabledRef = useRef(backendSceneEnabled);
+  backendSceneEnabledRef.current = backendSceneEnabled;
   const characters = useMemo<NarraCharacter[]>(
     () => (narraBookCharacters ?? []).filter((item) => item.backendManaged),
     [narraBookCharacters],
@@ -815,6 +818,13 @@ function ReaderContent({ route, navigation }: Props) {
           return;
         }
         bridgeRef.current?.setSceneSlotState(anchor, "error");
+        // Раньше провал молча возвращал слот в «Попробовать снова». Код
+        // ошибки нужен и читателю, и нам в логах отзывов.
+        toast.error(t("narra.sceneSlotFailed", "Не удалось нарисовать сцену"), {
+          description: backendCode
+            ? t("narra.sceneSlotFailedCode", "Код: {{code}}", { code: backendCode })
+            : undefined,
+        });
       } finally {
         sceneSlotActions.delete(anchor);
       }
@@ -1275,11 +1285,22 @@ function ReaderContent({ route, navigation }: Props) {
       );
       sceneSuggestionStateRef.current = sceneAdvance.state;
       if (sceneAdvance.suggest) {
-        console.log("[SceneSlot] suggest → insertSceneSlot", {
-          interval: sceneSuggestionInterval,
-          step: sceneAdvance.state.step,
-        });
-        bridgeRef.current?.insertSceneSlot();
+        // Без готовой разметки бэкенда слот рисовать нечем: раньше вставлялся
+        // немой квадрат без подписи, который читатель видел как пустую
+        // страницу. Пропускаем вставку; счётчик предложит слот на следующем
+        // интервале, когда манифест станет ready.
+        if (!backendSceneEnabledRef.current) {
+          console.log("[SceneSlot] suggest skipped: backend scenes are not ready", {
+            interval: sceneSuggestionInterval,
+            step: sceneAdvance.state.step,
+          });
+        } else {
+          console.log("[SceneSlot] suggest → insertSceneSlot", {
+            interval: sceneSuggestionInterval,
+            step: sceneAdvance.state.step,
+          });
+          bridgeRef.current?.insertSceneSlot();
+        }
       } else if (sceneAdvance.moved) {
         console.log("[SceneSlot] move counted", {
           pagesTurned: sceneAdvance.state.pagesTurned,
@@ -1499,6 +1520,7 @@ function ReaderContent({ route, navigation }: Props) {
         idle: t("narra.sceneSlotShow", "Сгенерировать сцену"),
         loading: t("narra.sceneSlotDrawing", "Рисуем сцену…"),
         loadingHint: t("narra.sceneSlotDrawingHint", "Обычно 2–3 минуты"),
+        disabled: t("narra.sceneSlotDisabled", "Сцена появится после разметки книги"),
         enabled: backendSceneEnabled,
         caption: t("narra.sceneSlotCaption", "Сцена — сгенерировано ИИ"),
         error: t("narra.sceneSlotError", "Попробовать снова"),

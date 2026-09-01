@@ -1933,3 +1933,82 @@ test('internal router exposes all worker endpoints', () => {
     '/v1/book-analysis/synthesize-character'
   ])
 })
+
+test('grounded profile claims keep the valid evidence subset instead of dropping the claim', async () => {
+  const { normalizeGroundedProfileClaim } = await import('../internal-generation-service.mjs')
+  const evidenceById = new Map([
+    ['ev-1', { type: 'character_trait' }],
+    ['ev-2', { type: 'character_action' }]
+  ])
+  const allowed = new Set(['character_trait', 'character_action'])
+
+  const partiallyGrounded = normalizeGroundedProfileClaim(
+    { value: 'замкнутый', evidenceIds: ['ev-1', 'ev-hallucinated'], confidence: 0.9 },
+    'traits[0]',
+    evidenceById,
+    allowed
+  )
+  assert.equal(partiallyGrounded.value, 'замкнутый')
+  assert.deepEqual(partiallyGrounded.evidenceIds, ['ev-1'])
+
+  const wrongType = normalizeGroundedProfileClaim(
+    { value: 'бледный', evidenceIds: ['ev-2'], confidence: 0.9 },
+    'traits[1]',
+    evidenceById,
+    new Set(['character_trait'])
+  )
+  assert.equal(wrongType, null)
+
+  const ungrounded = normalizeGroundedProfileClaim(
+    { value: 'выдумано', evidenceIds: ['ev-hallucinated'], confidence: 0.9 },
+    'traits[2]',
+    evidenceById,
+    allowed
+  )
+  assert.equal(ungrounded, null)
+})
+
+test('profile audit keeps the candidate description when the auditor omits it and drops it only on explicit null', async () => {
+  const { normalizeProfileAuditResult } = await import('../internal-generation-service.mjs')
+  const evidenceById = new Map([
+    ['ev-1', { type: 'character_trait' }],
+    ['ev-2', { type: 'character_action' }]
+  ])
+  const source = {
+    traits: [{ value: 'замкнутый', evidenceIds: ['ev-1'], confidence: 0.9 }],
+    description: {
+      value: 'Бывший студент, задавленный бедностью и собственной теорией.',
+      evidenceIds: ['ev-1', 'ev-2'],
+      confidence: 0.8
+    }
+  }
+
+  const omitted = normalizeProfileAuditResult(
+    { traits: [{ index: 0, evidenceIds: ['ev-1'] }] },
+    source,
+    evidenceById
+  )
+  assert.equal(omitted.descriptionAccepted, true)
+  assert.equal(omitted.source.description.value, source.description.value)
+  assert.equal(omitted.acceptedTraitCount, 1)
+
+  const rejected = normalizeProfileAuditResult(
+    { traits: [{ index: 0, evidenceIds: ['ev-1'] }], description: null },
+    source,
+    evidenceById
+  )
+  assert.equal(rejected.descriptionAccepted, false)
+  assert.equal(rejected.source.description, null)
+
+  const rewritten = normalizeProfileAuditResult(
+    {
+      traits: [{ index: 0, evidenceIds: ['ev-1'] }],
+      description: { value: 'Бывший студент.', evidenceIds: ['ev-2', 'ev-unknown'] }
+    },
+    source,
+    evidenceById
+  )
+  assert.equal(rewritten.descriptionAccepted, true)
+  assert.equal(rewritten.source.description.value, 'Бывший студент.')
+  assert.deepEqual(rewritten.source.description.evidenceIds, ['ev-2'])
+})

@@ -1185,15 +1185,19 @@ function profileClaimCount(value, { array = false } = {}) {
   return value == null ? 0 : 1
 }
 
-function normalizeGroundedProfileClaim(rawClaim, name, evidenceById, allowedTypes) {
+export function normalizeGroundedProfileClaim(rawClaim, name, evidenceById, allowedTypes) {
   try {
     const claim = normalizeEvidenceClaim(rawClaim, name)
-    if (!claim.evidenceIds.every((id) => evidenceById.has(id))) return null
-    if (
-      allowedTypes &&
-      !claim.evidenceIds.every((id) => allowedTypes.has(evidenceById.get(id).type))
-    ) return null
-    return claim
+    // Одна выдуманная ссылка на улику раньше обнуляла весь claim, и профиль
+    // терял описание/черты. Оставляем claim с валидным подмножеством улик.
+    const evidenceIds = claim.evidenceIds.filter((id) =>
+      evidenceById.has(id) &&
+      (!allowedTypes || allowedTypes.has(evidenceById.get(id).type))
+    )
+    if (!evidenceIds.length) return null
+    return evidenceIds.length === claim.evidenceIds.length
+      ? claim
+      : { ...claim, evidenceIds }
   } catch (error) {
     if (error?.code === 'VALIDATION') return null
     throw error
@@ -1528,7 +1532,7 @@ function mergeProfileTraitCandidates(source, recall) {
   return { ...source, traits: [...merged.values()].slice(0, 16) }
 }
 
-function normalizeProfileAuditResult(value, source, evidenceById) {
+export function normalizeProfileAuditResult(value, source, evidenceById) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.traits)) {
     invalid('LLM profile audit result is not an object with traits', 'GENERATION_RESULT_INVALID')
   }
@@ -1554,7 +1558,12 @@ function normalizeProfileAuditResult(value, source, evidenceById) {
   let description = null
   const candidateDescription = source?.description && typeof source.description === 'object' &&
     !Array.isArray(source.description) ? source.description : null
-  if (value.description != null) {
+  if (value.description === undefined) {
+    // Аудитор не упомянул описание — это «без изменений», а не отказ.
+    // Явный null остаётся отказом; раньше оба случая обнуляли описание, и
+    // карточка героя показывала плейсхолдер вместо био (C2-RC2).
+    description = candidateDescription
+  } else if (value.description !== null) {
     if (!candidateDescription || typeof value.description !== 'object' || Array.isArray(value.description)) {
       invalid('LLM profile audit description is invalid', 'GENERATION_RESULT_INVALID')
     }

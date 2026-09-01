@@ -1,5 +1,6 @@
 import { narraGatewayRequest } from "@/lib/ai/narra-gateway-fetch";
 import { useNarraStore } from "@/stores/narra-store";
+import { buildCharacterNameMatcherSpec, findCharacterNameMatches } from "./character-name-matcher";
 import { primeCharacterStressForms } from "./stress-markup";
 import type { NarraCharacter, NarraSceneAudioSegment } from "./types";
 import { narratorVoiceFor } from "./voice-rules";
@@ -21,13 +22,44 @@ function normalizeCharacterKey(value: string): string {
 function resolveCharacter(value: unknown, characters: NarraCharacter[]): NarraCharacter | null {
   if (typeof value !== "string" || !value.trim()) return null;
   const key = normalizeCharacterKey(value);
-  return (
-    characters.find((character) =>
-      [character.id, character.name, character.fullName].some(
-        (candidate) => normalizeCharacterKey(candidate) === key,
-      ),
-    ) ?? null
+  const exact = characters.find((character) =>
+    [character.id, character.name, character.fullName, ...(character.aliases ?? [])].some(
+      (candidate) => candidate && normalizeCharacterKey(candidate) === key,
+    ),
   );
+  if (exact) return exact;
+  // Модель часто возвращает имя не в той форме, что в реестре: косвенный
+  // падеж («Раскольникова»), уменьшительное или часть полного имени. Раньше
+  // такая реплика уходила «Рассказчику» — теперь ищем по словоформам тем же
+  // матчером, что подсвечивает имена в тексте.
+  const matches = findCharacterNameMatches(value.trim(), buildCharacterNameMatcherSpec(characters));
+  const matchedId = matches[0]?.characterId;
+  if (matchedId && matches.every((match) => match.characterId === matchedId)) {
+    return characters.find((character) => character.id === matchedId) ?? null;
+  }
+  // Последняя попытка: одно из слов ответа совпадает с отдельным словом имени
+  // (фамилия без имени, имя без отчества), и такой персонаж ровно один.
+  const words = new Set(
+    value
+      .split(/[^\p{L}\p{N}]+/u)
+      .map(normalizeCharacterKey)
+      .filter((word) => word.length >= 3),
+  );
+  const byWord = characters.filter((character) =>
+    [character.name, character.fullName, ...(character.aliases ?? [])]
+      .filter(Boolean)
+      .flatMap((candidate) => candidate.split(/[^\p{L}\p{N}]+/u))
+      .map(normalizeCharacterKey)
+      .some((word) => word.length >= 3 && words.has(word)),
+  );
+  return byWord.length === 1 ? byWord[0] : null;
+}
+
+function rosterEntry(character: NarraCharacter): string {
+  const names = [character.name, character.fullName, ...(character.aliases ?? [])]
+    .map((item) => item?.trim())
+    .filter((item, index, all): item is string => Boolean(item) && all.indexOf(item) === index);
+  return `${character.id}: ${names.join(" / ")}`;
 }
 
 export function parseNarraAudioScenario(
@@ -65,7 +97,7 @@ export async function generateNarraAudioScenario(
   // Словарь ударений имён книги (P9) — синтез сегментов сцены пойдёт через
   // synthesizeNarraSpeech, который читает активный словарь.
   primeCharacterStressForms(characters);
-  const roster = characters.map((character) => `${character.id}: ${character.fullName}`).join("; ");
+  const roster = characters.map(rosterEntry).join("; ");
   const response = await narraGatewayRequest("/v2/ai/chat/complete", {
     method: "POST",
     headers: { "content-type": "application/json" },

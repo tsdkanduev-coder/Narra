@@ -36,6 +36,8 @@ READANY_SIMULATOR_NAME="iPhone 17 Pro Max" READANY_ALLOW_PASTEBOARD_SYNC=1 ./scr
 
 Сделано: карта loop, ревью с локализацией на бэке, живые пробы staging, рабочая сборка симулятора, NARRA_GATEWAY.md, аддитивные помощники (см. выше).
 
+Сделано в коде (см. ledger): P0-1 (слот сцены без бэкенда), P0-2 (промоушен приоритета слота), P0-4 (описание героя после аудита), P0-3 частично (резолв героя в озвучке сцены).
+
 Осталось (в порядке приоритета, см. таблицу P0 в ревью):
 1. P0-1 клиент: не вставлять слот сцены при `!backendSceneEnabled`, видимая рамка/подпись, явное «Сцена появится после разметки», toast при `failed` (`ReaderScreen.tsx` ~1269-1283, 742-822; `reader.template.html` `renderSceneInsert`/`configureSceneSlots`; после правки шаблона — `pnpm run build:reader`).
 2. P0-2 gateway: промоушен приоритета в `ensureSceneSlot` (`postgres-book-markup-repository.mjs` ~365-441) + тест в `test/book-p0-reader-path.test.mjs`; на staging поднять `BOOK_SCENE_WORKER_REPLICAS`.

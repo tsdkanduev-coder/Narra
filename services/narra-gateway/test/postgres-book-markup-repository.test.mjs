@@ -757,3 +757,68 @@ test('operational controls use explicit pause state, heartbeats and scene latenc
   assert.match(migration, /CREATE TABLE worker_heartbeats/)
   assert.doesNotMatch(migration, /2027|infinity/i)
 })
+
+function readySceneContextRow() {
+  return {
+    id: 'book-1', scope: 'catalog', title: 'Книга', author: 'Автор',
+    markup_version_id: 'markup-1', text_length: 60000, input_hash: 'a'.repeat(64),
+    publication_content_hash: 'a'.repeat(64), scene_policy: null,
+    normalized_text_object_key: 'analysis/book-1/normalized-text-v1.txt',
+    normalized_text_hash: 'b'.repeat(64),
+    analysis_run_id: 'run-1', analysis_stage: 'publish', analysis_status: 'ready',
+    analysis_error_code: null, analysis_updated_at: new Date('2026-08-31T12:00:00Z')
+  }
+}
+
+test('reader scene request promotes a slot already queued by the low-priority backfill', async () => {
+  const pool = scriptedPool([
+    () => ({ rows: [readySceneContextRow()] }),
+    () => ({ rows: [] }), // idempotent insert: job already exists
+    () => ({ rows: [{ id: 'job-1', status: 'queued', priority: 35 }] }),
+    () => ({ rows: [] }), // promotion update
+    () => ({ rows: [] }), // slot insert
+    () => ({ rows: [{
+      scene_key: 'text-interval-v1:1', slot_index: 1, anchor_text_offset: 9000,
+      job_id: 'job-1', status: 'queued', asset_id: null
+    }] })
+  ])
+  const repository = createPostgresBookMarkupRepository(pool, {
+    idFactory: () => '123e4567-e89b-42d3-a456-426614174000'
+  })
+
+  const scene = await repository.ensureReaderBookScene({
+    subjectId: null,
+    bookEditionId: 'book-1',
+    progressFraction: 0.2,
+    priority: 70
+  })
+
+  assert.equal(scene.status, 'queued')
+  const promotion = pool.queries.find(({ sql }) => /GREATEST\(priority, \$2\)/.test(sql))
+  assert.ok(promotion, 'a queued backfill job must be promoted to the reader priority')
+  assert.match(promotion.sql, /LEAST\(available_at, now\(\)\)/)
+  assert.match(promotion.sql, /status = 'queued' AND priority < \$2/)
+  assert.deepEqual(promotion.params, ['job-1', 70])
+})
+
+test('reader scene request leaves an already prioritised queued job untouched', async () => {
+  const pool = scriptedPool([
+    () => ({ rows: [readySceneContextRow()] }),
+    () => ({ rows: [] }),
+    () => ({ rows: [{ id: 'job-1', status: 'queued', priority: 70 }] }),
+    () => ({ rows: [] }),
+    () => ({ rows: [{
+      scene_key: 'text-interval-v1:1', slot_index: 1, anchor_text_offset: 9000,
+      job_id: 'job-1', status: 'queued', asset_id: null
+    }] })
+  ])
+  const repository = createPostgresBookMarkupRepository(pool, {
+    idFactory: () => '123e4567-e89b-42d3-a456-426614174000'
+  })
+
+  await repository.ensureReaderBookScene({
+    subjectId: null, bookEditionId: 'book-1', progressFraction: 0.2, priority: 45
+  })
+
+  assert.equal(pool.queries.some(({ sql }) => /GREATEST\(priority, \$2\)/.test(sql)), false)
+})

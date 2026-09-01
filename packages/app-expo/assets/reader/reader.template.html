@@ -5615,6 +5615,7 @@ a { color: ${primary} !important; }
       loadingHint: 'Обычно 2–3 минуты',
       caption: 'Сцена — сгенерировано ИИ',
       error: 'Попробовать снова',
+      disabled: 'Сцена появится после разметки книги',
     };
     var _sceneSlotsEnabled = false;
 
@@ -5713,6 +5714,18 @@ a { color: ${primary} !important; }
         '  stroke-width: 1.5;',
         '  stroke-dasharray: none;',
         '  vector-effect: non-scaling-stroke;',
+        '}',
+        // Подпись неактивного слота (бэкенд ещё готовит разметку).
+        '.' + SCENE_INSERT_CLASS + ' .readany-scene-disabled {',
+        '  position: relative;',
+        '  z-index: 1;',
+        '  max-width: 80%;',
+        '  font-family: "SB Sans Interface", system-ui, sans-serif !important;',
+        '  font-size: 14px !important;',
+        '  line-height: 20px !important;',
+        '  color: ' + muted + ' !important;',
+        '  text-align: center !important;',
+        '  text-indent: 0 !important;',
         '}',
         // shadcn Button outline/default, adapted from app/components/ui/button.tsx
         // to the EPUB DOM. Keep Narra's Body typography and semantic colors.
@@ -5903,7 +5916,10 @@ a { color: ${primary} !important; }
       box.className = 'readany-scene-box';
       var loader = null;
       var preset = state === 'loading' ? 'sweep-gradient' : 'pixels-organic';
-      if (state === 'loading' || state === 'idle') {
+      // Пока бэкенд не готов, слот не «дышит» анимацией и не выглядит как
+      // пустая страница: читатель видит понятную подпись вместо немого квадрата.
+      var inert = state !== 'loading' && !_sceneSlotsEnabled;
+      if ((state === 'loading' || state === 'idle') && !inert) {
         loader = doc.createElement('canvas');
         loader.className = 'readany-scene-pixels';
         loader.setAttribute('data-scene-effect', preset);
@@ -5914,10 +5930,16 @@ a { color: ${primary} !important; }
         // No visible copy or logo; keep the status available to VoiceOver.
         box.setAttribute('role', 'status');
         box.setAttribute('aria-label', _sceneSlotLabels.loading);
+      } else if (inert) {
+        var note = doc.createElement('div');
+        note.className = 'readany-scene-disabled';
+        note.setAttribute('role', 'status');
+        note.appendChild(doc.createTextNode(_sceneSlotLabels.disabled));
+        box.appendChild(note);
       } else if (state === 'error') {
-        if (_sceneSlotsEnabled) appendSceneAction(box, _sceneSlotLabels.error);
+        appendSceneAction(box, _sceneSlotLabels.error);
       } else {
-        if (_sceneSlotsEnabled) appendSceneAction(box, _sceneSlotLabels.idle);
+        appendSceneAction(box, _sceneSlotLabels.idle);
       }
       // The same Primary5 frame is present in every placeholder state.
       appendSceneFlowBorder(box);

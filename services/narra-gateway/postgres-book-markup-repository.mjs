@@ -409,6 +409,20 @@ export function createPostgresBookMarkupRepository(pool, {
       )
       job.status = 'queued'
     }
+    // A reader-initiated request (priority 70) must overtake the low-priority
+    // catalog backfill (35) that already enqueued the same slot. The idempotent
+    // insert above never touches an existing row, so promote it explicitly.
+    if (job.status === 'queued' && Number(job.priority) < priority) {
+      await client.query(
+        `UPDATE generation_jobs
+         SET priority = GREATEST(priority, $2),
+             available_at = LEAST(available_at, now()),
+             updated_at = now()
+         WHERE id = $1 AND status = 'queued' AND priority < $2`,
+        [job.id, priority]
+      )
+      job.priority = priority
+    }
     await client.query(
       `INSERT INTO book_scene_slots (
          id, book_edition_id, markup_version_id, policy_version, scene_key,

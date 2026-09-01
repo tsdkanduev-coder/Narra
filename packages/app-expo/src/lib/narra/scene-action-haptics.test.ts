@@ -91,9 +91,11 @@ describe("scene action haptics", () => {
     );
     expect(template).toContain("if (!_sceneSlotsEnabled) return");
     expect(template).toContain("var _sceneSlotsEnabled = false");
-    expect(template).toContain(
-      "if (_sceneSlotsEnabled) appendSceneAction(box, _sceneSlotLabels.idle)",
-    );
+    // Пока бэкенд не готов, слот не получает кнопку и не «дышит»: вместо немого
+    // квадрата — подпись, что сцена появится после разметки книги.
+    expect(template).toContain("var inert = state !== 'loading' && !_sceneSlotsEnabled");
+    expect(template).toContain("note.appendChild(doc.createTextNode(_sceneSlotLabels.disabled))");
+    expect(template).toContain("appendSceneAction(box, _sceneSlotLabels.idle)");
     expect(template).not.toContain("action.disabled = !_sceneSlotsEnabled");
   });
 });
