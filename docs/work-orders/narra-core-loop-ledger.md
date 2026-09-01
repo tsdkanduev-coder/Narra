@@ -28,8 +28,9 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | `generateBookScene` слал пустые genre/chapter | fixed `570ebc01` |
 | P0 | Catalog ingest / marking_up оставлял v2-константу; «Война и мир» без analysis-run | fixed `b3aefcbc` |
 | P0 | `POST /v2/ai/chat/complete` отвечал без `GET /:bookEditionId/search` | fixed `e0c24363` |
-| P1 | `narra-gateway-fetch.ts` зашивал `api-test.narra.disrupt.builders` | fixed `d97f9192` |
+| P1 | `narra-gateway-fetch.ts` зашивал `api-test.narra.disrupt.builders` | documented `3d44fc1d` — канон README, host не выдумывали |
 | P1 | sceneJobRunner и `/v2/media/images` слали сцены/обложки в gigachat-image | fixed `9665e023` |
+| P2 | пустой поиск по книге с запросом писал «Введите слово…» | fixed `f9ce77ae` |
 
 ### Что починено (этот проход)
 
@@ -50,8 +51,9 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `b3aefcbc` P0: catalog marking_up → book-analysis backfill; v2 только private
 - `e0c24363` P0: chat/complete ищет книгу до LLM
 - `570ebc01` P0: generateBookScene берёт жанр издания и главу
-- `d97f9192` P1: fallback Gateway — `api.narra.disrupt.builders`, не api-test
 - `9665e023` P1: сцены/обложки через gpt-image-2, не GigaChat Image
+- `3d44fc1d` P1: fallback Gateway снова канон README (`api-test`); выдуманный production откатили
+- `f9ce77ae` поиск по книге: запрос без совпадений — «Ничего не найдено»
 
 ### Что всплыло после более поздней фазы
 
@@ -62,8 +64,9 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - После P4: catalog marking_up без analysis-run (Война и мир) — fixed `b3aefcbc`.
 - После P4: чат героя без поиска по книге — fixed `e0c24363`.
 - После fanart-хвоста: generateBookScene всё ещё слал пустые genre/chapter — fixed `570ebc01`.
-- После P1 leftover: fetch зашивал api-test — fixed `d97f9192`.
 - После P1 leftover: sceneJobRunner / `/v2/media/images` шли в GigaChat — fixed `9665e023`.
+- После specialist paper на `0e87cbdb`: выдуманный `api.narra` откатили на канон README — `3d44fc1d`.
+- Поиск ☰ с запросом без хитов писал «Введите слово…» — fixed `f9ce77ae`.
 
 ### Что остаётся
 
@@ -73,7 +76,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - P5 matcher не переписывали: vitest 48/48. Wiring `setCharacterNames` на месте.
 - Prefetch / `ensureBookScenesThrough` по-прежнему не извлекает текст, если нет `normalized_text_*` (только on-demand `scenes/at`).
 - Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'` только для private. Catalog — v3 analysis.
-- `eas.json` по-прежнему задаёт `EXPO_PUBLIC_NARRA_GATEWAY_URL=api-test` для EAS-профилей. Fallback в коде — production.
+- Fallback Gateway и EAS — `api-test.narra.disrupt.builders` (канон `services/narra-gateway/README.md`). Другой production-хост не выдумывали.
 - `generateInternalScene` и `/v2/media/images` для сцен/обложек идут в gpt-image-2. HTTP не меняли.
 - `generateBookScene` берёт жанр из `book_edition_genres` и главу из `content_navigation`; если главы нет — поле пустое, жанр тогда из названия.
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
@@ -117,12 +120,13 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
 
-## leftover P1 — production host и gpt-image-2 · 2026-08-31 · d97f9192, 9665e023
+## leftover P1 — host/README + gpt-image-2 + поиск · 2026-09-01 · 3d44fc1d, 9665e023, f9ce77ae
 
-- `narra-gateway-fetch.ts`: fallback `https://api.narra.disrupt.builders`. Env по-прежнему перекрывает.
-- sceneJobRunner и `POST /v2/media/images` не вызывают GigaChat Image для сцен/обложек.
-- `voice-rules.ts` уже в репозитории — не добавляли второй файл.
-- Проверки: vitest narra-gateway-fetch 23/23; compose + book-p0 18/18.
+- `narra-gateway-fetch.ts`: fallback = канон README `api-test`. Env перекрывает. `api.narra` не канон — откатили.
+- sceneJobRunner и `POST /v2/media/images` для сцен/обложек — gpt-image-2 (`generateInternalScene`). HTTP не меняли.
+- `voice-rules.ts` + тесты уже в репо (`e74f36af`) — второй файл не добавляли.
+- ☰-поиск: пустой запрос — подсказка; запрос без хитов — «Ничего не найдено».
+- Проверки: vitest fetch + contents + voice-rules 42/42.
 - Не проверено: устройство, живая «Война и мир», десктопный Foliate.
 
 ## leftover P1 — scenes/at без normalized_text_* · 2026-08-31 · 22162ae1
