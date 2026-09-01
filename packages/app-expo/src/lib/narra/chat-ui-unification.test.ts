@@ -14,6 +14,8 @@ describe("Narra and character chat UI contract", () => {
     expect(chatScreen).toContain("completeNarraChat");
     expect(chatScreen).toContain("bookEditionId");
     expect(chatScreen).toContain("SEARCH_NOT_READY");
+    expect(chatScreen).toContain("Ничего не найдено");
+    expect(chatScreen).not.toContain("/v2/ai/chat/stream");
   });
 
   it("uses the standard top toast for Narra response failures", () => {

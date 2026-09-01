@@ -80,6 +80,9 @@ test('P0: catalog marking_up starts book-analysis, not legacy v2 markup jobs', a
   assert.match(catalogBackfill, /edition\.scope = 'catalog'/)
   assert.match(catalogBackfill, /edition\.status IN \('marking_up', 'failed'\)/)
   assert.match(catalogBackfill, /restartAnalysisRun/)
+  assert.match(catalogBackfill, /run\.status IN \('queued', 'running'\)/)
+  assert.match(catalogBackfill, /lease_expires_at > now\(\)/)
+  assert.match(catalogBackfill, /LEASE_EXPIRED/)
   assert.match(gateway, /enqueueCatalogAnalysisBackfill/)
   assert.equal(
     (await import('../book-markup.mjs')).BOOK_MARKUP_ANALYSIS_VERSION,

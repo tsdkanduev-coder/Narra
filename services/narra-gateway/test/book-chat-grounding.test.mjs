@@ -77,6 +77,20 @@ test('semantic search not ready also fails the chat', async () => {
   )
 })
 
+test('empty search snippets fail the chat instead of answering off-book', async () => {
+  await assert.rejects(
+    () =>
+      attachBookSearchContext({
+        search: async () => ({ results: [] }),
+        subjectId: 'reader-1',
+        bookEditionId: 'book-1',
+        messages,
+        purpose: 'character_chat'
+      }),
+    (error) => error.code === 'SEARCH_EMPTY' && error.message === 'Ничего не найдено'
+  )
+})
+
 test('complete chat retrieves book search before requestChat', async () => {
   const source = await readFile(new URL('../index.mjs', import.meta.url), 'utf8')
   const start = source.indexOf("app.post('/v2/ai/chat/complete'")

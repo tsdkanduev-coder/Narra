@@ -18,7 +18,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBackendBook } from "@/hooks/use-backend-book";
 import { useResponsiveLayout } from "@/hooks/use-responsive-layout";
 import { completeNarraChat } from "@/lib/ai/narra-chat";
-import { NarraServiceError, reportNarraError, searchNotReadyCode } from "@/lib/narra/errors";
+import {
+  NarraServiceError,
+  emptyBookSearchCode,
+  reportNarraError,
+  searchNotReadyCode,
+} from "@/lib/narra/errors";
 import { useLibraryStore, useNarraStore } from "@/stores";
 import { useChatStore } from "@/stores/chat-store";
 import type { AttachedQuote, Message } from "@readany/core/types";
@@ -237,17 +242,25 @@ export function ChatScreen({
     (error: unknown) => {
       const normalized = reportNarraError("narra_chat", error);
       const readyCode = searchNotReadyCode(error) || searchNotReadyCode(normalized);
+      const emptyCode = emptyBookSearchCode(error) || emptyBookSearchCode(normalized);
       toast.error(
         readyCode
           ? t("chat.searchNotReady", "SEARCH_NOT_READY")
-          : t("chat.responseFailed", "Не удалось получить ответ"),
+          : emptyCode
+            ? t("chat.searchEmpty", "Ничего не найдено")
+            : t("chat.responseFailed", "Не удалось получить ответ"),
         {
           description: readyCode
             ? t(
                 "chat.searchNotReadyMessage",
                 "Поиск по книге ещё не готов. Ответ без книги недоступен.",
               )
-            : normalized.message,
+            : emptyCode
+              ? t(
+                  "chat.searchEmptyMessage",
+                  "По книге нет фрагментов для ответа. Ответ без книги недоступен.",
+                )
+              : normalized.message,
           action: {
             label: t("common.retry", "Повторить"),
             onClick: () => handleRetryRef.current(),

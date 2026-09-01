@@ -32,14 +32,8 @@ import { generateBackendReaderScene, readSceneDataUri } from "@/lib/narra/backen
 import { backendSceneForAnchor } from "@/lib/narra/backend-scene-state";
 import { buildCharacterNameMatcherSpec } from "@/lib/narra/character-name-matcher";
 import { isCharacterUnlocked } from "@/lib/narra/domain";
-import { reportNarraError } from "@/lib/narra/errors";
-import { normalizePersistedNarraMediaUri } from "@/lib/narra/media";
-import { generateNarraSceneImage } from "@/lib/narra/scene-image-openrouter";
-import {
-  sceneImageDataUri,
-  sceneInsertAnchors,
-  sceneSourceKeyForAnchor,
-} from "@/lib/narra/scene-inserts";
+import { NarraServiceError, reportNarraError } from "@/lib/narra/errors";
+import { sceneInsertAnchors, sceneSourceKeyForAnchor } from "@/lib/narra/scene-inserts";
 import {
   INITIAL_SCENE_SUGGESTION_STATE,
   advanceSceneSuggestion,
@@ -724,7 +718,6 @@ function ReaderContent({ route, navigation }: Props) {
   const sceneSuggestionInterval = useNarraStore((state) => state.sceneSuggestionInterval);
   const sceneSuggestionStateRef = useRef(INITIAL_SCENE_SUGGESTION_STATE);
   const narraScenes = useNarraStore((state) => state.books[bookId]?.scenes);
-  const setNarraScene = useNarraStore((state) => state.setScene);
   const narraSceneRequests = useNarraStore((state) => state.books[bookId]?.sceneRequests);
   const narraSceneAnchorBindings = useNarraStore(
     (state) => state.books[bookId]?.sceneAnchorBindings,
@@ -739,20 +732,6 @@ function ReaderContent({ route, navigation }: Props) {
     },
     [sceneSlotActions],
   );
-
-  // Видимый текст страницы — контекст для промпта сцены (как в P6)
-  const collectVisibleSceneExcerpt = useCallback(async () => {
-    const bridge = bridgeRef.current;
-    let excerpt = (await bridge?.getVisibleText())?.trim() ?? "";
-    if (!excerpt) {
-      const visibleSegments = await bridge?.getVisibleTTSSegments(currentCfi || null);
-      excerpt = (visibleSegments ?? [])
-        .map((segment) => segment.text.trim())
-        .filter(Boolean)
-        .join(" ");
-    }
-    return excerpt.trim();
-  }, [currentCfi]);
 
   // Генерация (или перегенерация) сцены для врезки: слот уже показывает
   // плейсхолдер «Рисуем сцену…» — сюда приходим по событию из WebView.
@@ -777,52 +756,35 @@ function ReaderContent({ route, navigation }: Props) {
         // Catalog identity may be present before the persisted binding has hydrated.
         const edition = bookState?.backendBinding?.bookEditionId || book?.bookEditionId;
         usesBackend = Boolean(edition);
-        if (edition) {
-          const previous = bookState?.sceneRequests?.[sourceKey] ?? cached?.backendScene;
-          const manifest = bookState?.backendManifest;
-          const intent =
-            previous?.bookEditionId === edition
-              ? previous
-              : {
-                  bookEditionId: edition,
-                  requestedProgress,
-                  markupIdentity: backendSceneMarkupIdentity(manifest, bookState?.backendBinding),
-                };
-          await generateBackendReaderScene(
-            {
-              bookId,
-              anchor,
-              sourceKey,
-              chapter,
-              intent,
-              display: (targetAnchor, dataUri) =>
-                bridgeRef.current?.replaceSceneSlot(targetAnchor, dataUri),
-              remove: (targetAnchor) => bridgeRef.current?.removeSceneSlot(targetAnchor),
-            },
-            action.signal,
+        if (!edition) {
+          throw new NarraServiceError(
+            "REQUEST",
+            "Сцена рисуется только для книги с изданием в Narra. Ответ без книги недоступен.",
           );
-          return;
         }
-        // Only unbound books retain the independent legacy visible-excerpt path.
-        const excerpt = cached?.excerpt?.trim() || (await collectVisibleSceneExcerpt());
-        if (!excerpt) throw new Error("SCENE_EMPTY_EXCERPT");
-        const imageUri = await generateNarraSceneImage(bookId, chapter, excerpt, characters);
-        if (action.signal.aborted) return;
-        setNarraScene(bookId, {
-          sourceKey,
-          chapter,
-          excerpt,
-          imageUri,
-          generatedAt: Date.now(),
-          anchor,
-        });
-        // Файл читается в RN и передаётся data-URI — WebView не ходит в ФС
-        const base64 = await FileSystem.readAsStringAsync(
-          normalizePersistedNarraMediaUri(imageUri),
-          { encoding: FileSystem.EncodingType.Base64 },
+        const previous = bookState?.sceneRequests?.[sourceKey] ?? cached?.backendScene;
+        const manifest = bookState?.backendManifest;
+        const intent =
+          previous?.bookEditionId === edition
+            ? previous
+            : {
+                bookEditionId: edition,
+                requestedProgress,
+                markupIdentity: backendSceneMarkupIdentity(manifest, bookState?.backendBinding),
+              };
+        await generateBackendReaderScene(
+          {
+            bookId,
+            anchor,
+            sourceKey,
+            chapter,
+            intent,
+            display: (targetAnchor, dataUri) =>
+              bridgeRef.current?.replaceSceneSlot(targetAnchor, dataUri),
+            remove: (targetAnchor) => bridgeRef.current?.removeSceneSlot(targetAnchor),
+          },
+          action.signal,
         );
-        if (!action.signal.aborted)
-          bridgeRef.current?.replaceSceneSlot(anchor, sceneImageDataUri(base64, imageUri));
       } catch (cause) {
         if (action.signal.aborted) return;
         // Native download errors can contain signed URLs. Backend details use the safe journal.
@@ -832,18 +794,7 @@ function ReaderContent({ route, navigation }: Props) {
         sceneSlotActions.delete(anchor);
       }
     },
-    [
-      book?.meta.title,
-      book?.bookEditionId,
-      sceneSlotActions,
-      t,
-      bookId,
-      bookTitle,
-      characters,
-      collectVisibleSceneExcerpt,
-      currentChapter,
-      setNarraScene,
-    ],
+    [book?.meta.title, book?.bookEditionId, sceneSlotActions, t, bookId, bookTitle, currentChapter],
   );
 
   // Врезка восстановлена при загрузке секции — вернуть сохранённую картинку

@@ -123,6 +123,13 @@ test('book scenes use the configured image route and landscape aspect ratio', ()
   assert.match(images, /requestCoverImageWithFallback/)
   assert.doesNotMatch(images, /gigachatImage/)
   assert.doesNotMatch(images, /kandinskyQueued/)
+  const portrait = gatewaySource.slice(
+    gatewaySource.indexOf('async function generateInternalPortrait'),
+    gatewaySource.indexOf('async function measuredInternalImageRequest')
+  )
+  assert.match(portrait, /generateInternalCharacterPortrait/)
+  assert.doesNotMatch(portrait, /gigachat-image/)
+  assert.doesNotMatch(portrait, /gigachatImage/)
 })
 
 test('shadow analysis workers keep the hardened read-only runtime', () => {

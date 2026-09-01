@@ -12,7 +12,7 @@ import { type NarraChatMessageInput, completeNarraChat } from "@/lib/ai/narra-ch
 import { recordTelemetry } from "@/lib/analytics/telemetry";
 import { normalizeCharacterChatPlaceholder } from "@/lib/narra/chat-placeholder";
 import { isCharacterUnlocked, normalizeReadingProgress } from "@/lib/narra/domain";
-import { reportNarraError, searchNotReadyCode } from "@/lib/narra/errors";
+import { emptyBookSearchCode, reportNarraError, searchNotReadyCode } from "@/lib/narra/errors";
 import type { NarraCharacter, NarraChatMessage } from "@/lib/narra/types";
 import { toast } from "@/lib/notifications";
 import type { RootStackParamList } from "@/navigation/RootNavigator";
@@ -353,17 +353,25 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
       } catch (error) {
         const normalized = reportNarraError("character_chat", error);
         const readyCode = searchNotReadyCode(error) || searchNotReadyCode(normalized);
+        const emptyCode = emptyBookSearchCode(error) || emptyBookSearchCode(normalized);
         toast.error(
           readyCode
             ? t("chat.searchNotReady", "SEARCH_NOT_READY")
-            : t("narra.chatFailedTitle", "Не удалось получить ответ"),
+            : emptyCode
+              ? t("chat.searchEmpty", "Ничего не найдено")
+              : t("narra.chatFailedTitle", "Не удалось получить ответ"),
           {
             description: readyCode
               ? t(
                   "chat.searchNotReadyMessage",
                   "Поиск по книге ещё не готов. Ответ без книги недоступен.",
                 )
-              : normalized.message,
+              : emptyCode
+                ? t(
+                    "chat.searchEmptyMessage",
+                    "По книге нет фрагментов для ответа. Ответ без книги недоступен.",
+                  )
+                : normalized.message,
           },
         );
       } finally {

@@ -29,6 +29,10 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 | P0 | Catalog ingest / marking_up оставлял v2-константу; «Война и мир» без analysis-run | fixed `b3aefcbc` |
 | P0 | `POST /v2/ai/chat/complete` отвечал без `GET /:bookEditionId/search` | fixed `e0c24363` |
 | P1 | `ChatScreen` слал Loop 6 через local RAG `useStreamingChat`; `SEARCH_NOT_READY` глотался и шёл ответ мимо книги | fixed `5d9ca406` |
+| P1 | Пустой search (`snippets.length===0`) шёл в LLM без фрагментов | in progress |
+| P1 | ReaderScreen без edition рисовал сцену через OpenRouter | in progress |
+| P1 | Catalog analysis backfill не лечил dead-leased queued/running (Война и мир) | in progress |
+| P1 | `generateInternalPortrait` всё ещё gigachat-image | in progress |
 | P1 | `narra-gateway-fetch.ts` зашивал `api-test.narra.disrupt.builders` | documented `3d44fc1d` — канон README, host не выдумывали |
 | P1 | sceneJobRunner и `/v2/media/images` слали сцены/обложки в gigachat-image | fixed `9665e023` |
 | P2 | пустой поиск по книге с запросом писал «Введите слово…» | fixed `f9ce77ae` |
@@ -56,6 +60,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `3d44fc1d` P1: fallback Gateway снова канон README (`api-test`); выдуманный production откатили
 - `f9ce77ae` поиск по книге: запрос без совпадений — «Ничего не найдено»
 - `5d9ca406` P1: ChatScreen → `/v2/ai/chat/complete`; `SEARCH_NOT_READY` не отвечает мимо книги
+- этот проход P1: пустой search / сцена без edition / dead-leased analysis / портреты gpt-image-2
 
 ### Что всплыло после более поздней фазы
 
@@ -69,7 +74,11 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - После P1 leftover: sceneJobRunner / `/v2/media/images` шли в GigaChat — fixed `9665e023`.
 - После specialist paper на `0e87cbdb`: выдуманный `api.narra` откатили на канон README — `3d44fc1d`.
 - Поиск ☰ с запросом без хитов писал «Введите слово…» — fixed `f9ce77ae`.
-- После P0 chat grounding: `ChatScreen` всё ещё звал `useStreamingChat` (core local RAG), а gateway глотал `SEARCH_NOT_READY` и отвечал мимо книги — чиним в этом проходе.
+- После P0 chat grounding: `ChatScreen` всё ещё звал `useStreamingChat` (core local RAG), а gateway глотал `SEARCH_NOT_READY` и отвечал мимо книги — fixed `5d9ca406`.
+- Пустой search после grounding всё ещё пускал LLM без фрагментов — чиним в этом проходе.
+- ReaderScreen без `bookEditionId` шёл в OpenRouter/`/v2/media/images`, мимо `scenes/at`.
+- Catalog backfill пропускал queued/running с мёртвым lease — «Война и мир» зависала в marking_up.
+- `generateInternalPortrait` оставался на gigachat-image; сцены не трогали.
 
 ### Что остаётся
 
@@ -80,7 +89,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Prefetch / `ensureBookScenesThrough` по-прежнему не извлекает текст, если нет `normalized_text_*` (только on-demand `scenes/at`).
 - Worker пишет `BOOK_MARKUP_ANALYSIS_VERSION='book-markup-v2'` только для private. Catalog — v3 analysis.
 - Fallback Gateway и EAS — `api-test.narra.disrupt.builders` (канон `services/narra-gateway/README.md`). Другой production-хост не выдумывали.
-- `generateInternalScene` и `/v2/media/images` для сцен/обложек идут в gpt-image-2. HTTP не меняли.
+- `generateInternalScene`, `/v2/media/images` и портреты (`generateInternalPortrait` → `generateInternalCharacterPortrait`) идут в gpt-image-2. Сцены не возвращали в GigaChat Image. HTTP не меняли.
 - `generateBookScene` берёт жанр из `book_edition_genres` и главу из `content_navigation`; если главы нет — поле пустое, жанр тогда из названия.
 - Чат с вкладки «Мой путь» может слать stale `book.progress` (из reader tap `publishCharacterProgress` ок).
 - Документ `NARRA_GATEWAY.md` сверяет маршруты, формы запросов не переписывались. Речь: `POST /v2/speech/synthesize`.
@@ -89,7 +98,7 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - Без `analysisRepository` catalog-scope по-прежнему не греет `charactersDue` (как было в коде; канон «только catalog» коду не соответствует).
 - Postgres integration / e2e без `BOOK_MARKUP_TEST_DATABASE_URL` не гонялись.
 - `generateBookScene` / `internal-generation-service.mjs`: `previousExcerpts=[]` — leftover, не трогали.
-- Stream-чат `/v2/ai/chat/stream` по-прежнему без search-before-LLM.
+- Stream-чат `POST /v2/ai/chat/stream` по-прежнему без search-before-LLM. Клиентский Loop 6 его не зовёт (`complete`). `character-analysis.ts` ещё ходит в stream — leftover.
 
 ## P0 — backend reader path · 2026-08-31 · a19a07ce
 
@@ -125,6 +134,17 @@ Work order P1–P8 + обязательные backend P0 (реализация, 
 - `generateBookScene` передаёт их в `sceneGenerationPrompt`. Публичный HTTP не менялся.
 - Проверки: book-p0 + scene-generation + chat-grounding + contracts — 31/31.
 - Не проверено: живая генерация сцены «Война и мир».
+
+## leftover P1 — empty search / bound scene / dead-lease analysis / portraits · 2026-09-01
+
+- Пустой book search (`snippets.length===0`) бросает `SEARCH_EMPTY` / «Ничего не найдено» — LLM без фрагментов не вызывается.
+- `ReaderScreen` без edition не зовёт OpenRouter; только `scenes/at` + `generateInternalScene` (gpt-image-2).
+- `enqueueCatalogAnalysisBackfill` лечит queued/running без живого job (dead lease) — fail `LEASE_EXPIRED` + `restartAnalysisRun`.
+- `generateInternalPortrait` = `generateInternalCharacterPortrait` (gpt-image-2). `/v2/media/images` уже на cover-chain. Сцены не в GigaChat.
+- Host fallback без изменений: `api-test.narra.disrupt.builders`.
+- Loop 6 / P0 landings сохранены. Stream без search — leftover, клиентский чат его не зовёт.
+- Проверки: gateway book-chat-grounding + p0 + compose + analysis-repository 37/37 в этом наборе; vitest errors/chat-ui/reader-bound/narra-chat/haptics 14/14; tsc app-expo 0.
+- Не проверено: устройство, Foliate, живая «Война и мир».
 
 ## leftover P1 — Loop 6 ChatScreen → gateway search-before-LLM · 2026-09-01 · 5d9ca406
 

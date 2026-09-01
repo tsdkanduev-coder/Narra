@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { NarraServiceError, normalizeNarraError, searchNotReadyCode } from "./errors";
+import {
+  NarraServiceError,
+  emptyBookSearchCode,
+  normalizeNarraError,
+  searchNotReadyCode,
+} from "./errors";
 
 describe("Narra error messages", () => {
   it("separates book extraction failures from generic service failures", () => {
@@ -43,5 +48,14 @@ describe("Narra error messages", () => {
     const fromText = normalizeNarraError(new Error("SEMANTIC_SEARCH_NOT_READY"));
     expect(fromText.backendCode).toBe("SEMANTIC_SEARCH_NOT_READY");
     expect(fromText.message).toContain("SEMANTIC_SEARCH_NOT_READY");
+  });
+
+  it("keeps empty book search as Ничего не найдено instead of a generic service line", () => {
+    const empty = normalizeNarraError(
+      new NarraServiceError("SERVICE", "index", undefined, undefined, "SEARCH_EMPTY"),
+    );
+    expect(empty.backendCode).toBe("SEARCH_EMPTY");
+    expect(empty.message).toBe("Ничего не найдено");
+    expect(emptyBookSearchCode(empty)).toBe("SEARCH_EMPTY");
   });
 });

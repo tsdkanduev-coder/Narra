@@ -43,6 +43,13 @@ export function searchNotReadyCode(
   return undefined;
 }
 
+export function emptyBookSearchCode(error: unknown): "SEARCH_EMPTY" | undefined {
+  if (narraBackendCode(error) === "SEARCH_EMPTY") return "SEARCH_EMPTY";
+  const detail = error instanceof Error ? error.message : String(error ?? "");
+  if (/SEARCH_EMPTY|Ничего не найдено/.test(detail)) return "SEARCH_EMPTY";
+  return undefined;
+}
+
 function searchNotReadyError(
   code: "SEARCH_NOT_READY" | "SEMANTIC_SEARCH_NOT_READY",
   requestId?: string,
@@ -60,14 +67,28 @@ function searchNotReadyError(
 export function normalizeNarraError(error: unknown): NarraServiceError {
   if (error instanceof NarraServiceError) {
     const readyCode = searchNotReadyCode(error);
-    return readyCode
-      ? searchNotReadyError(readyCode, error.requestId, error.technicalDetail)
-      : error;
+    if (readyCode) {
+      return searchNotReadyError(readyCode, error.requestId, error.technicalDetail);
+    }
+    if (emptyBookSearchCode(error)) {
+      return new NarraServiceError(
+        "SERVICE",
+        "Ничего не найдено",
+        error.requestId,
+        error.technicalDetail,
+        "SEARCH_EMPTY",
+      );
+    }
+    return error;
   }
   const readyCode = searchNotReadyCode(error);
   if (readyCode) {
     const detail = error instanceof Error ? error.message : String(error);
     return searchNotReadyError(readyCode, undefined, detail);
+  }
+  if (emptyBookSearchCode(error)) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return new NarraServiceError("SERVICE", "Ничего не найдено", undefined, detail, "SEARCH_EMPTY");
   }
   const detail = error instanceof Error ? error.message : String(error);
   if (/NARRA_GATEWAY_URL|not configured/i.test(detail)) {

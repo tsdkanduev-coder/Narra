@@ -50,6 +50,11 @@ export async function attachBookSearchContext({
     limit: 8
   })
   const snippets = (result?.results || []).map((item) => item.snippet).filter(Boolean)
-  if (!snippets.length) return messages
+  if (!snippets.length) {
+    throw Object.assign(new Error('Ничего не найдено'), {
+      code: 'SEARCH_EMPTY',
+      status: 404
+    })
+  }
   return [groundingMessage(snippets), ...messages]
 }
