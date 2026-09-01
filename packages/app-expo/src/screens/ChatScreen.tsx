@@ -245,7 +245,7 @@ export function ChatScreen({
       const emptyCode = emptyBookSearchCode(error) || emptyBookSearchCode(normalized);
       toast.error(
         readyCode
-          ? t("chat.searchNotReady", "SEARCH_NOT_READY")
+          ? t("chat.searchNotReady", "Книга ещё не готова к разговору")
           : emptyCode
             ? t("chat.searchEmpty", "Ничего не найдено")
             : t("chat.responseFailed", "Не удалось получить ответ"),

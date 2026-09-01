@@ -331,7 +331,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
       const text = value.trim();
       if (!text || !book || !character || !unlocked || sending) return;
       if (!bookEditionId) {
-        toast.error(t("chat.searchNotReady", "SEARCH_NOT_READY"), {
+        toast.error(t("chat.searchNotReady", "Книга ещё не готова к разговору"), {
           description: t(
             "chat.searchNotReadyMessage",
             "Поиск по книге ещё не готов. Ответ без книги недоступен.",
@@ -371,7 +371,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
         const emptyCode = emptyBookSearchCode(error) || emptyBookSearchCode(normalized);
         toast.error(
           readyCode
-            ? t("chat.searchNotReady", "SEARCH_NOT_READY")
+            ? t("chat.searchNotReady", "Книга ещё не готова к разговору")
             : emptyCode
               ? t("chat.searchEmpty", "Ничего не найдено")
               : t("narra.chatFailedTitle", "Не удалось получить ответ"),

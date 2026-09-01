@@ -50,6 +50,8 @@
     "configRequired": "Настройте ИИ",
     "configRequiredMessage": "Добавьте адрес API, ключ и модель в настройках",
     "responseFailed": "Не удалось получить ответ",
+    "searchNotReady": "Книга ещё не готова к разговору",
+    "searchNotReadyMessage": "Поиск по книге ещё не готов. Ответ без книги недоступен.",
     "configureAI": "Настроить ИИ",
     "deleteThread": "Удалить чат",
     "deleteThreadConfirm": "Удалить этот чат?",

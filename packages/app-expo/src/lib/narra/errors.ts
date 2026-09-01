@@ -140,6 +140,7 @@ export function reportNarraError(scope: string, error: unknown): NarraServiceErr
   console.warn("[NarraError]", {
     scope,
     code: normalized.code,
+    backendCode: normalized.backendCode,
     detail,
     requestId: normalized.requestId,
   });

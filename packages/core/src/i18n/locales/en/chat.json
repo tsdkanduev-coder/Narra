@@ -64,6 +64,8 @@
     "threads": "Chats",
     "untitled": "Untitled",
     "responseFailed": "Couldn't get a response",
+    "searchNotReady": "The book isn’t ready to talk yet",
+    "searchNotReadyMessage": "Book search is not ready yet. An answer without the book is unavailable.",
     "dismissKeyboard": "Dismiss keyboard",
     "responseStopped": "Response stopped.",
     "sources": "Sources",

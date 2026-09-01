@@ -18,6 +18,8 @@ describe("Narra and character chat UI contract", () => {
     expect(chatScreen).toContain("completeNarraChat");
     expect(chatScreen).toContain("bookEditionId");
     expect(chatScreen).toContain("SEARCH_NOT_READY");
+    expect(chatScreen).toContain("Книга ещё не готова к разговору");
+    expect(chatScreen).not.toContain('t("chat.searchNotReady", "SEARCH_NOT_READY")');
     expect(chatScreen).toContain("Ничего не найдено");
     expect(chatScreen).not.toContain("/v2/ai/chat/stream");
   });
@@ -25,7 +27,10 @@ describe("Narra and character chat UI contract", () => {
   it("refuses hero dialogue without a bound edition and never calls stream", () => {
     expect(characterChat).toContain("completeNarraChat");
     expect(characterChat).toContain("bookEditionId");
-    expect(characterChat).toContain("SEARCH_NOT_READY");
+    expect(characterChat).toContain("searchNotReadyCode");
+    expect(characterChat).toContain("chat.searchNotReady");
+    expect(characterChat).toContain("Книга ещё не готова к разговору");
+    expect(characterChat).not.toContain('t("chat.searchNotReady", "SEARCH_NOT_READY")');
     expect(characterChat).not.toContain("/v2/ai/chat/stream");
     expect(characterChat).toContain("if (!bookEditionId)");
   });

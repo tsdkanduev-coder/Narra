@@ -4,7 +4,7 @@
  * matching English file is updated and this revision is refreshed.
  */
 export const ENGLISH_SOURCE_REVISIONS = {
-  "chat.json": "d7e912b4f69342fc66bd686fd2dc47e9528fdbf6ff5e73224c7f39a633055177",
+  "chat.json": "dc88acf09b8072477bed44445d041beca923b75abf40d40aca07922074ed970c",
   "common.json": "44b2d86b294a28d31c746866d068430ef1f9ed22f71e6e5b97cb7f9d61bd5249",
   "library.json": "3b40365c5a5a647181c8096bb3232b5b9c05efc66aa7523209a42cb97964e43a",
   "misc.json": "7b47e4fe8a63f11be0ff7b7a82f887bcb7ab65312f8f9ded55a95c6706eec7f7",
