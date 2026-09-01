@@ -25,7 +25,7 @@ const BOOKS = (process.env.NARRA_EVALS_BOOKS || 'Преступление и н�
 const SUITES = new Set((process.env.NARRA_EVALS_SUITES || 'manifest,scenes,search,assistant,profiles,text,speech,chat').split(',').map((s) => s.trim()))
 const LLM_ENABLED = process.env.NARRA_EVALS_LLM === '1'
 const LLM_BUDGET = Number(process.env.NARRA_EVALS_BUDGET_LLM_CALLS || 12)
-const SCENE_WAIT_S = Number(process.env.NARRA_EVALS_SCENE_WAIT_S || 20)
+const SCENE_WAIT_S = Number(process.env.NARRA_EVALS_SCENE_WAIT_S || 300) // = BACKEND_SCENE_DEADLINE_MS клиента
 const OUT = process.env.NARRA_EVALS_OUT || path.join('tools', 'narra-evals', 'reports', new Date().toISOString().replace(/[:.]/g, '-'))
 const ALLOW_FAIL = process.argv.includes('--allow-fail')
 
