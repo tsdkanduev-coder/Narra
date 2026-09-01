@@ -226,8 +226,53 @@ test('internal generation service reads the canonical excerpt and stores a scene
   assert.equal(sceneCalls, 1)
   assert.match(scenePrompt, /Анна открыла дверь/)
   assert.match(scenePrompt, /тёмные волосы/)
+  assert.doesNotMatch(scenePrompt, /КОНТЕКСТ СЕРИИ/)
   assert.equal(first.asset.type, 'scene_image')
   assert.match(first.asset.objectKey, /\/scenes\/text-interval-v1-aaaaaaaaaaaaaaaa\/0\.png$/)
+})
+
+test('generateBookScene fills previous excerpts from earlier published slots', async () => {
+  const slot0 = `${'Первая сцена у двери. '.repeat(20)}`
+  const slot1 = `${'Вторая сцена у окна. '.repeat(20)}`
+  const normalizedText = slot0 + slot1
+  const bytes = Buffer.from(normalizedText)
+  const normalizedTextHash = createHash('sha256').update(bytes).digest('hex')
+  const storage = memoryStorage({
+    normalized: { bytes, mimeType: 'text/plain; charset=utf-8' }
+  })
+  let scenePrompt = ''
+  const service = createInternalGenerationService({
+    storage,
+    logger: { info() {}, error() {} },
+    async completeChat() { throw new Error('unused') },
+    async generatePortrait() { throw new Error('portrait must not run') },
+    async generateScene(prompt) {
+      scenePrompt = prompt
+      return { bytes: Buffer.from('scene'), mimeType: 'image/png', provider: 'gpt-image-2' }
+    },
+    async synthesizeSpeech() { throw new Error('unused') },
+    async generateIdleAnimation() { throw new Error('unused') }
+  })
+  await service.generateBookScene({
+    idempotencyKey: '11111111-1111-4111-8111-111111111111:scene:text-interval-v1:1:text-interval-v1:aaaaaaaaaaaaaaaa',
+    bookEditionId: '11111111-1111-4111-8111-111111111111',
+    targetVersion: 'text-interval-v1:aaaaaaaaaaaaaaaa',
+    scope: 'private',
+    bookTitle: 'Книга',
+    bookAuthor: 'Автор',
+    sceneKey: 'text-interval-v1:1',
+    slotIndex: 1,
+    anchorTextOffset: slot0.length + Math.floor(slot1.length / 2),
+    excerptStartTextOffset: slot0.length,
+    excerptEndTextOffset: normalizedText.length,
+    textLength: normalizedText.length,
+    normalizedTextObjectKey: 'normalized',
+    normalizedTextHash,
+    characters: []
+  })
+  assert.match(scenePrompt, /Вторая сцена у окна/)
+  assert.match(scenePrompt, /КОНТЕКСТ СЕРИИ/)
+  assert.match(scenePrompt, /Первая сцена у двери/)
 })
 
 test('internal generation service publishes one requested character asset independently', async () => {

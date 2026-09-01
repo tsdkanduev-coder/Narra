@@ -1408,11 +1408,15 @@ export function createPostgresBookMarkupRepository(pool, {
       subjectId,
       bookEditionId,
       readerTextOffset,
-      priority = 45
+      priority = 45,
+      normalizedTextObjectKey = null,
+      normalizedTextHash = null
     }) {
       return transaction(pool, async (client) => {
         const loaded = await loadSceneContext(client, { subjectId, bookEditionId })
-        const context = loaded ? withNormalizedText(loaded) : null
+        const context = loaded
+          ? withNormalizedText(loaded, { normalizedTextObjectKey, normalizedTextHash })
+          : null
         if (!context) return { requested: 0, ready: 0, pending: 0, failed: 0 }
         const frontier = bookMediaFrontier({
           scope: context.scope,

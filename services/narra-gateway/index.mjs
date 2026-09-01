@@ -1586,6 +1586,13 @@ app.post('/v2/ai/chat/stream', aiLimit, aiDailyLimit, express.json({ limit: '1mb
     recordActorAnalytics = input.analyticsTier !== 'none'
     requestPurpose = input.purpose
     requestId = input.requestId || randomUUID()
+    const groundedMessages = await attachBookSearchContext({
+      search: bookSearchService?.search?.bind(bookSearchService),
+      subjectId: req.installation?.sub,
+      bookEditionId: input.bookEditionId,
+      messages: input.messages,
+      purpose: input.purpose
+    })
     if (recordActorAnalytics) {
       await appendInternalEvent(req, 'ai_request_started', {
         request_id: requestId,
@@ -1595,6 +1602,7 @@ app.post('/v2/ai/chat/stream', aiLimit, aiDailyLimit, express.json({ limit: '1mb
     }
     const { response: upstream, provider, model, responseCost, finalizeAttempt } = await requestChat({
       ...input,
+      messages: groundedMessages,
       requestId,
       stream: true,
       onAttempt: recordActorAnalytics

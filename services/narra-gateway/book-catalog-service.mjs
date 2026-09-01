@@ -77,6 +77,31 @@ async function resolveNormalizedSceneText({ store, storage }, { subjectId, bookE
   return { objectKey, contentHash, textLength: extracted.textLength }
 }
 
+async function warmupBookScenes({ store, storage }, {
+  subjectId,
+  bookEditionId,
+  readerTextOffset
+}) {
+  if (typeof store.ensureBookScenesThrough !== 'function') {
+    return { requested: 0, ready: 0, pending: 0, failed: 0 }
+  }
+  const textRef = await resolveNormalizedSceneText({ store, storage }, {
+    subjectId,
+    bookEditionId
+  })
+  return store.ensureBookScenesThrough({
+    subjectId,
+    bookEditionId,
+    readerTextOffset,
+    ...(textRef
+      ? {
+          normalizedTextObjectKey: textRef.objectKey,
+          normalizedTextHash: textRef.contentHash
+        }
+      : {})
+  })
+}
+
 function serviceError(code, message, status) {
   return Object.assign(new Error(message), { code, status })
 }
@@ -836,7 +861,7 @@ export function createBookCatalogService({
           : bundleVersion
       })
       if (!snapshot) throw serviceError('NOT_FOUND', 'Книга не найдена', 404)
-      await store.ensureBookScenesThrough?.({
+      await warmupBookScenes({ store, storage }, {
         subjectId,
         bookEditionId,
         readerTextOffset: snapshot.readerTextOffset
@@ -905,13 +930,11 @@ export function createBookCatalogService({
         else if (request.value.status === 'ready') warmed.ready += 1
         else warmed.pending += 1
       }
-      const sceneWarmup = typeof store.ensureBookScenesThrough === 'function'
-        ? await store.ensureBookScenesThrough({
-            subjectId,
-            bookEditionId,
-            readerTextOffset: progress.readerTextOffset
-          })
-        : { requested: 0, ready: 0, pending: 0, failed: 0 }
+      const sceneWarmup = await warmupBookScenes({ store, storage }, {
+        subjectId,
+        bookEditionId,
+        readerTextOffset: progress.readerTextOffset
+      })
       return {
         bookEditionId,
         readerTextOffset: progress.readerTextOffset,

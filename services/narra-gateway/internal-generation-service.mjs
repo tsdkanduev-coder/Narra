@@ -8,6 +8,7 @@ import { voiceForGender } from './voices.mjs'
 import { catalogCoverPrompt } from './catalog-cover-prompt.mjs'
 import { normalizeBookDisplayIdentity } from './book-identity.mjs'
 import { buildCharacterPortraitPrompt } from './character-portrait-prompt.mjs'
+import { previousSceneExcerptsFromText } from './book-scenes.mjs'
 import { sceneGenerationPrompt } from './scene-generation.mjs'
 import {
   BOOK_ANALYSIS_GENDER_EVIDENCE_TYPES,
@@ -2517,7 +2518,7 @@ export function createInternalGenerationService({
           chapter: input.chapter,
           excerpt,
           characters: input.characters.map(sceneCharacter).filter(({ name }) => name),
-          previousExcerpts: []
+          previousExcerpts: previousSceneExcerptsFromText(text, input)
         })
         const generated = await generateScene(prompt, signal, {
           bookEditionId: input.bookEditionId,

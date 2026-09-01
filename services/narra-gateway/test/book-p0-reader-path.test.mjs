@@ -113,6 +113,8 @@ test('P0: getBookSceneInput supplies catalog genre and chapter to generateBookSc
   assert.match(scene, /genreId: input\.genreId/)
   assert.match(scene, /chapter: input\.chapter/)
   assert.doesNotMatch(scene, /genreId: ''/)
+  assert.match(scene, /previousSceneExcerptsFromText\(text, input\)/)
+  assert.doesNotMatch(scene, /previousExcerpts: \[\]/)
 })
 
 test('P0: catalog progress uses charactersDue without a v3 cutoff', async () => {
@@ -146,6 +148,40 @@ test('P1: loadSceneContext keeps a published markup row without normalized_text_
     /if \(!row \|\| !row\.normalized_text_object_key \|\| !row\.normalized_text_hash\) return null/
   )
   assert.match(fn, /normalizedTextObjectKey: row\.normalized_text_object_key \|\| null/)
+})
+
+test('P1: ensureBookScenesThrough accepts on-demand normalized text like scenes/at', async () => {
+  const source = await readFile(
+    new URL('../postgres-book-markup-repository.mjs', import.meta.url),
+    'utf8'
+  )
+  const start = source.indexOf('async ensureBookScenesThrough')
+  const end = source.indexOf('async listCatalogBooks')
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+  const fn = source.slice(start, end)
+  assert.match(fn, /normalizedTextObjectKey = null/)
+  assert.match(fn, /normalizedTextHash = null/)
+  assert.match(
+    fn,
+    /withNormalizedText\(loaded, \{ normalizedTextObjectKey, normalizedTextHash \}\)/
+  )
+})
+
+test('P1: prefetch warmup extracts normalized text before ensureBookScenesThrough', async () => {
+  const source = await readFile(
+    new URL('../book-catalog-service.mjs', import.meta.url),
+    'utf8'
+  )
+  const start = source.indexOf('async function warmupBookScenes')
+  const end = source.indexOf('function serviceError')
+  assert.notEqual(start, -1)
+  assert.notEqual(end, -1)
+  const fn = source.slice(start, end)
+  assert.match(fn, /resolveNormalizedSceneText/)
+  assert.match(fn, /normalizedTextObjectKey: textRef\.objectKey/)
+  assert.match(fn, /normalizedTextHash: textRef\.contentHash/)
+  assert.ok(fn.indexOf('resolveNormalizedSceneText') < fn.indexOf('ensureBookScenesThrough'))
 })
 
 test('speech path stays POST /v2/speech/synthesize', async () => {

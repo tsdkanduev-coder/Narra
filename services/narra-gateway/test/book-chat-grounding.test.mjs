@@ -91,15 +91,35 @@ test('empty search snippets fail the chat instead of answering off-book', async 
   )
 })
 
-test('complete chat retrieves book search before requestChat', async () => {
-  const source = await readFile(new URL('../index.mjs', import.meta.url), 'utf8')
-  const start = source.indexOf("app.post('/v2/ai/chat/complete'")
-  const end = source.indexOf("app.post('/v2/speech/synthesize'")
+function chatHandlerSource(source, route, nextRoute) {
+  const start = source.indexOf(`app.post('${route}'`)
+  const end = source.indexOf(`app.post('${nextRoute}'`)
   assert.notEqual(start, -1)
   assert.ok(end > start)
-  const handler = source.slice(start, end)
+  return source.slice(start, end)
+}
+
+function assertSearchBeforeLlm(handler) {
   assert.match(handler, /attachBookSearchContext/)
   assert.match(handler, /bookSearchService\?\.search/)
   assert.match(handler, /input\.bookEditionId/)
   assert.ok(handler.indexOf('attachBookSearchContext') < handler.indexOf('requestChat'))
+}
+
+test('complete chat retrieves book search before requestChat', async () => {
+  const source = await readFile(new URL('../index.mjs', import.meta.url), 'utf8')
+  assertSearchBeforeLlm(chatHandlerSource(
+    source,
+    '/v2/ai/chat/complete',
+    '/v2/speech/synthesize'
+  ))
+})
+
+test('stream chat retrieves book search before requestChat', async () => {
+  const source = await readFile(new URL('../index.mjs', import.meta.url), 'utf8')
+  assertSearchBeforeLlm(chatHandlerSource(
+    source,
+    '/v2/ai/chat/stream',
+    '/v2/ai/chat/complete'
+  ))
 })

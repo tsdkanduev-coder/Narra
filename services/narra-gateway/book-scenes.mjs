@@ -112,3 +112,53 @@ export function bookSceneIdempotencyKey({
 }) {
   return [bookEditionId, 'scene', markupContentHash, policyVersion, slotIndex].join(':')
 }
+
+const PREVIOUS_SCENE_EXCERPT_LIMIT = 2
+
+function intervalFromSceneOffsets({
+  slotIndex,
+  excerptStartTextOffset,
+  excerptEndTextOffset
+}) {
+  if (
+    Number.isSafeInteger(slotIndex) &&
+    slotIndex > 0 &&
+    Number.isSafeInteger(excerptStartTextOffset) &&
+    excerptStartTextOffset > 0
+  ) {
+    const interval = Math.floor(excerptStartTextOffset / slotIndex)
+    if (interval >= 1) return interval
+  }
+  if (
+    Number.isSafeInteger(excerptStartTextOffset) &&
+    Number.isSafeInteger(excerptEndTextOffset) &&
+    excerptEndTextOffset > excerptStartTextOffset
+  ) {
+    return excerptEndTextOffset - excerptStartTextOffset
+  }
+  return BOOK_SCENE_INTERVAL_TEXT_LENGTH
+}
+
+export function previousSceneExcerptsFromText(text, input = {}) {
+  if (typeof text !== 'string' || !text) return []
+  const slotIndex = input.slotIndex
+  if (!Number.isSafeInteger(slotIndex) || slotIndex < 1) return []
+  const textLength = Number.isSafeInteger(input.textLength) && input.textLength > 0
+    ? input.textLength
+    : text.length
+  const intervalTextLength = intervalFromSceneOffsets(input)
+  if (!Number.isSafeInteger(intervalTextLength) || intervalTextLength < 1) return []
+  const policy = bookScenePolicy(textLength, { intervalTextLength })
+  const excerpts = []
+  const firstPrevious = Math.max(0, slotIndex - PREVIOUS_SCENE_EXCERPT_LIMIT)
+  for (let previousIndex = firstPrevious; previousIndex < slotIndex; previousIndex += 1) {
+    const slot = bookSceneSlotAt(
+      policy,
+      textLength,
+      policy.startTextOffset + previousIndex * policy.intervalTextLength
+    )
+    const excerpt = text.slice(slot.excerptStartTextOffset, slot.excerptEndTextOffset).trim()
+    if (excerpt) excerpts.push(excerpt)
+  }
+  return excerpts
+}

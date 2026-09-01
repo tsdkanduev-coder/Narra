@@ -7,7 +7,8 @@ import {
   bookMediaFrontier,
   bookScenePolicy,
   bookSceneSlotAt,
-  bookSceneSlotsThrough
+  bookSceneSlotsThrough,
+  previousSceneExcerptsFromText
 } from '../book-scenes.mjs'
 
 test('scene policy is compact and deterministic for the whole markup', () => {
@@ -45,6 +46,32 @@ test('private books keep a ten-percent media lead and catalog books prefetch all
   assert.equal(bookMediaFrontier({ scope: 'private', textLength: 100_000, readerTextOffset: 36_000 }), 46_000)
   assert.equal(bookMediaFrontier({ scope: 'private', textLength: 100_000, readerTextOffset: 96_000 }), 100_000)
   assert.equal(bookMediaFrontier({ scope: 'catalog', textLength: 100_000, readerTextOffset: 0 }), 100_000)
+})
+
+test('previous scene excerpts come from earlier slots of the same published text', () => {
+  const slot0 = 'AAAA'.repeat(5)
+  const slot1 = 'BBBB'.repeat(5)
+  const slot2 = 'CCCC'.repeat(5)
+  const slot3 = 'DDDD'.repeat(5)
+  const text = slot0 + slot1 + slot2 + slot3
+  assert.deepEqual(previousSceneExcerptsFromText(text, {
+    slotIndex: 0,
+    excerptStartTextOffset: 0,
+    excerptEndTextOffset: 20,
+    textLength: text.length
+  }), [])
+  assert.deepEqual(previousSceneExcerptsFromText(text, {
+    slotIndex: 1,
+    excerptStartTextOffset: 20,
+    excerptEndTextOffset: 40,
+    textLength: text.length
+  }), [slot0])
+  assert.deepEqual(previousSceneExcerptsFromText(text, {
+    slotIndex: 3,
+    excerptStartTextOffset: 60,
+    excerptEndTextOffset: 80,
+    textLength: text.length
+  }), [slot1, slot2])
 })
 
 test('prefetch selects scene anchors inside the media frontier without per-place markup links', () => {
