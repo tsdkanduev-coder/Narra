@@ -69,12 +69,59 @@ export async function narraAssistantGatewayFetch(
       : { parallel_tool_calls: source.parallel_tool_calls }),
   };
 
-  return narraGatewayRequest(stream ? "/v2/ai/chat/stream" : "/v2/ai/chat/complete", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    signal:
-      init?.signal ??
-      (typeof Request !== "undefined" && input instanceof Request ? input.signal : undefined),
+  const response = await narraGatewayRequest(
+    stream ? "/v2/ai/chat/stream" : "/v2/ai/chat/complete",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal:
+        init?.signal ??
+        (typeof Request !== "undefined" && input instanceof Request ? input.signal : undefined),
+    },
+  );
+  if (stream || !response.ok) return response;
+  return wrapCompleteResponse(response);
+}
+
+/**
+ * `/v2/ai/chat/complete` отвечает `{ text }`, а LangChain ждёт OpenAI
+ * chat.completion. Без обёртки non-stream вызовы (сжатие памяти треда при
+ * ≥12 сообщениях) получали пустой ответ: лишний полный вызов LLM на каждое
+ * сообщение, а память треда никогда не сохранялась (C3-1).
+ */
+export async function wrapCompleteResponse(response: Response): Promise<Response> {
+  const raw = await response.text();
+  let payload: { text?: unknown; request_id?: unknown } = {};
+  try {
+    payload = JSON.parse(raw) as typeof payload;
+  } catch {
+    payload = { text: raw };
+  }
+  const text = typeof payload.text === "string" ? payload.text : "";
+  const id =
+    typeof payload.request_id === "string" && payload.request_id
+      ? payload.request_id
+      : `narra-${Date.now()}`;
+  const completion = {
+    id,
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model: NARRA_ASSISTANT_MODEL,
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: text },
+        finish_reason: "stop",
+      },
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  };
+  const headers = new Headers(response.headers);
+  headers.set("content-type", "application/json");
+  return new Response(JSON.stringify(completion), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
 }

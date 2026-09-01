@@ -106,3 +106,54 @@ describe("Narra assistant Gateway adapter", () => {
     );
   });
 });
+
+describe("Narra assistant non-stream completions", () => {
+  beforeEach(() => {
+    vi.mocked(narraGatewayRequest).mockReset();
+  });
+
+  it("wraps /v2/ai/chat/complete as an OpenAI chat completion for LangChain", async () => {
+    vi.mocked(narraGatewayRequest).mockResolvedValueOnce(
+      new Response(JSON.stringify({ text: "Краткая память треда.", request_id: "req-1" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const response = await narraAssistantGatewayFetch("https://gateway.test/v2/ai/chat/stream", {
+      method: "POST",
+      body: JSON.stringify({
+        stream: false,
+        messages: [{ role: "user", content: "Сожми историю" }],
+      }),
+    });
+
+    expect(vi.mocked(narraGatewayRequest).mock.calls[0]?.[0]).toBe("/v2/ai/chat/complete");
+    const completion = (await response.json()) as {
+      id: string;
+      object: string;
+      choices: Array<{ message: { role: string; content: string }; finish_reason: string }>;
+    };
+    expect(completion.id).toBe("req-1");
+    expect(completion.object).toBe("chat.completion");
+    expect(completion.choices[0]?.message).toEqual({
+      role: "assistant",
+      content: "Краткая память треда.",
+    });
+    expect(completion.choices[0]?.finish_reason).toBe("stop");
+  });
+
+  it("passes gateway errors through untouched", async () => {
+    vi.mocked(narraGatewayRequest).mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Лимит", code: "RATE" }), { status: 429 }),
+    );
+
+    const response = await narraAssistantGatewayFetch("https://gateway.test/v2/ai/chat/stream", {
+      method: "POST",
+      body: JSON.stringify({ stream: false, messages: [] }),
+    });
+
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({ error: "Лимит", code: "RATE" });
+  });
+});

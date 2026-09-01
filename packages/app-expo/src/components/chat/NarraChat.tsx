@@ -94,6 +94,8 @@ interface NarraChatProps {
   revealMessageId?: string | null;
   onRevealComplete?: (messageId: string) => void;
   showModeControls?: boolean;
+  /** Стартовое значение «Без спойлеров»: для книжных чатов — включено. */
+  defaultSpoilerFree?: boolean;
 }
 
 /**
@@ -118,6 +120,7 @@ export function NarraChat({
   showScrollToBottomButton = true,
   showTypingIndicator = true,
   showModeControls = false,
+  defaultSpoilerFree = false,
 }: NarraChatProps) {
   const { colors } = useTheme();
   const { bottom: safeAreaBottom } = useSafeAreaInsets();
@@ -126,7 +129,7 @@ export function NarraChat({
   const inputNativeId = `narra-chat-input-${reactInputId.replaceAll(":", "")}`;
   const effectivePlaceholder = placeholder || t("chat.inputPlaceholder", "Сообщение");
   const [deepThinking, setDeepThinking] = useState(false);
-  const [spoilerFree, setSpoilerFree] = useState(false);
+  const [spoilerFree, setSpoilerFree] = useState(defaultSpoilerFree);
   // Текст композера раньше держала вендорная лента — теперь он наш.
   const [composerText, setComposerText] = useState("");
   // MessageScroller ставит стартовую прокрутку до того, как onLayout сообщит

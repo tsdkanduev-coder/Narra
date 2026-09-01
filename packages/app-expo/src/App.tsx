@@ -39,7 +39,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { PanelUIProvider } from "panelui-native";
 import { useEffect, useMemo, useState } from "react";
-import { LogBox, Platform, StyleSheet, View, useColorScheme } from "react-native";
+import { AppState, LogBox, Platform, StyleSheet, View, useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   type EntryExitAnimationFunction,
@@ -81,6 +81,7 @@ import { seekActiveTTS, seekActiveTTSBy } from "@/lib/platform/tts-track-control
 import { prewarmReader } from "@/lib/reader/reader-runtime";
 import { MobileSyncAdapter } from "@/lib/sync/sync-adapter-mobile";
 import { RootNavigator } from "@/navigation/RootNavigator";
+import { flushAllWrites } from "@/stores/persist";
 import { ReaderTOCSheetProvider } from "@/screens/reader/reader-toc-sheet-context";
 import { useLibraryStore } from "@/stores/library-store";
 import {
@@ -139,6 +140,17 @@ export default function App() {
 
   useEffect(() => startTelemetry(), []);
   useEffect(() => startDiagnostics(), []);
+
+  // Персист сторов пишется с задержкой 500 мс. Уход в фон (свайп приложения,
+  // звонок) раньше терял последнее сообщение чата, прогресс и привязку книги.
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "background" || state === "inactive") {
+        flushAllWrites().catch((err) => console.error("[App] flush on background failed", err));
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     async function bootstrap() {

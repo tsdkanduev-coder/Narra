@@ -92,7 +92,10 @@ export function ChatScreen({
       }),
     [book?.isVectorized, bookEditionId, bookId, narraChatMode],
   );
-  const spoilerFreeRef = useRef(false);
+  // Книжный чат по умолчанию без спойлеров: переключатель скрыт
+  // (showModeControls=false), а поиск по книге и системный промпт иначе
+  // работали в режиме «вся книга» и выдавали события дальше позиции читателя.
+  const spoilerFreeRef = useRef(Boolean(bookId));
   const recordChatPath = useCallback(
     (path: NarraChatPath) => recordDiagnostic("narra_chat_route", { mode: narraChatMode, path }),
     [narraChatMode],
@@ -488,6 +491,7 @@ export function ChatScreen({
               autoFocus={!embedded}
               floatingComposer
               showModeControls={false}
+              defaultSpoilerFree={Boolean(bookId)}
               showScrollToBottomButton={false}
               showTypingIndicator={false}
               topInset={headerHeight}
