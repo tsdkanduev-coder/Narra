@@ -19,7 +19,7 @@ import {
   encodeBookContentCursor,
   utf8CharacterChunk
 } from './book-content.mjs'
-import { formatCharacterDisplayName } from './character-display-name.mjs'
+import { formatCharacterDisplayName, isPseudoCharacterName } from './character-display-name.mjs'
 import { voiceForGender } from './voices.mjs'
 import { createHash, randomUUID } from 'node:crypto'
 import {
@@ -335,6 +335,7 @@ export function createBookCatalogService({
           : null,
         characters: (preview?.characters ?? [])
           .filter((character) => character.firstAppearanceTextOffset <= readerTextOffset)
+          .filter((character) => !isPseudoCharacterName(character.name, character.fullName))
           .map((character) => ({
             characterKey: character.characterKey,
             name: formatCharacterDisplayName(character.name),
@@ -449,7 +450,12 @@ export function createBookCatalogService({
             mediaByProjectedKey.set(projectedKey, media)
           }
         }
-        return projectedOrder.map((characterKey) => {
+        // «Рассказчик»/«Автор» из скана — не герой книги (C4/P0-5).
+        const cast = projectedOrder.filter((characterKey) => {
+          const character = profileByCharacterKey.get(characterKey)
+          return !isPseudoCharacterName(character?.name, character?.fullName)
+        })
+        return cast.map((characterKey) => {
           const character = profileByCharacterKey.get(characterKey)
           const media = mediaByProjectedKey.get(characterKey)
           const state = isCompleteCharacterBundle(media?.bundle) ? 'ready' : 'preparing'

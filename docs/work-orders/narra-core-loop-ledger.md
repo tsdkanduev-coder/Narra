@@ -311,7 +311,7 @@
 - `book-scenes.mjs`: `sceneExcerptAround` — отрывок строится вокруг якоря слота (середина интервала), а не с начала интервала; `previousSceneExcerptsFromText` — хвосты двух предыдущих слотов для единой серии; `chapterTitleAtOffset` — название главы из `content_navigation`.
 - `postgres-book-markup-repository.mjs` `getBookSceneInput`: жанр издания из `book_edition_genres` (id совпадают с `SCENE_ART_DIRECTIONS`) и глава из навигации run'а shadow-публикации. `internal-generation-service.mjs`: `normalizeBookSceneRequest` принимает опциональные `genreId`/`chapter` (старые воркеры их не шлют — совместимо), `generateBookScene` передаёт их в промпт.
 - Не сделано: версия промпта в idempotency-ключе (C6-RC5) — уже готовые картинки не перегенерируются сами; после деплоя нужен операторский requeue (`retry-failed-book-generation.mjs` / операторский API) для «Преступления и наказания».
-- Тесты: book-scenes +1, scene-generation +1, internal-generation-service (обновлён кейс сцены). Gateway `npm test` зелёный.
+- Тесты: book-scenes +1, scene-generation +1, internal-generation-service (обновлён кейс сцены). Gateway `npm test`: 702 pass / 16 skipped.
 
 ### Живая проверка P0-1 · 2026-09-02 · симулятор iPhone 17 Pro Max, staging
 
@@ -329,3 +329,9 @@
 - `backend-book-session.ts`: терминальная ошибка публикуется в статус и останавливает цикл bind/PUT (раньше — повтор каждые 5–60 с с повторной отправкой всего файла); `retry()` снимает блокировку.
 - Тест: `backend-book-session.test.ts` — после терминальной ошибки bind не повторяется ни по таймеру, ни по прогрессу, пока не вызван `retry()`. Не сделано: человекочитаемая строка статуса в `NarraCharactersScreen` для новых кодов (C7-RC5); umd по-прежнему считается неподдерживаемым (план предлагал грузить сконвертированный epub).
 - Проверки: app-expo vitest 846/846 (95 файлов), tsc 0.
+
+### P0-5 (часть) · псевдо-персонажи «Рассказчик/Автор» не попадают в каст · 2026-09-02 (gateway)
+
+- Живой факт: у «Евгения Онегина» на staging в списке героев был «Рассказчик». `character-display-name.mjs`: `isPseudoCharacterName` (рассказчик/нарратор/повествователь/автор, narrator/author/storyteller; именованный рассказчик с полным именем сохраняется). `book-catalog-service.mjs` фильтрует таких в обоих ветках `v3Manifest` (preview и ready).
+- Не сделано из P0-5: именительная форма `canonicalName` на резолвере (C4-RC4) и экспорт `aliases` в публичный профиль (C4-RC3).
+- Тесты: `test/character-display-name.test.mjs` +1. Gateway `npm test`: 703 pass / 16 skipped.

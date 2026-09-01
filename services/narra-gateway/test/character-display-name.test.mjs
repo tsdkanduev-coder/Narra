@@ -18,3 +18,13 @@ test('character display names normalize spacing without destroying existing casi
   assert.equal(formatCharacterDisplayName('МАРИЯ'), 'МАРИЯ')
   assert.equal(formatCharacterDisplayName(null), '')
 })
+
+test('pseudo-characters named after the narrative voice are recognised', async () => {
+  const { isPseudoCharacterName } = await import('../character-display-name.mjs')
+  assert.equal(isPseudoCharacterName('Рассказчик'), true)
+  assert.equal(isPseudoCharacterName('  автор '), true)
+  assert.equal(isPseudoCharacterName('Narrator', 'Narrator'), true)
+  assert.equal(isPseudoCharacterName('Рассказчик', 'Иван Петрович Белкин'), false)
+  assert.equal(isPseudoCharacterName('Раскольников'), false)
+  assert.equal(isPseudoCharacterName(''), false)
+})
