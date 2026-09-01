@@ -22,7 +22,7 @@ import path from 'node:path'
 
 const BASE = process.env.NARRA_GATEWAY_URL || 'https://api-test.narra.disrupt.builders'
 const BOOKS = (process.env.NARRA_EVALS_BOOKS || 'Преступление и наказание,Война и мир').split(',').map((s) => s.trim()).filter(Boolean)
-const SUITES = new Set((process.env.NARRA_EVALS_SUITES || 'manifest,scenes,search,profiles,text,speech,chat').split(',').map((s) => s.trim()))
+const SUITES = new Set((process.env.NARRA_EVALS_SUITES || 'manifest,scenes,search,assistant,profiles,text,speech,chat').split(',').map((s) => s.trim()))
 const LLM_ENABLED = process.env.NARRA_EVALS_LLM === '1'
 const LLM_BUDGET = Number(process.env.NARRA_EVALS_BUDGET_LLM_CALLS || 12)
 const SCENE_WAIT_S = Number(process.env.NARRA_EVALS_SCENE_WAIT_S || 20)
@@ -130,15 +130,81 @@ async function suiteScenes(token, book) {
 }
 
 async function suiteSearch(token, book) {
+  // Серверный поиск — необязательный контур: по дизайну владельца (#54) чат с
+  // Наррой идёт index-first с fallback на локальный индекс клиента, поэтому
+  // отключённый роутер — информация для ops, а не падение продукта.
   const result = await request(`/v2/books/${book.id}/search?q=${encodeURIComponent(book.query)}&limit=3`, {}, token)
   if (result.status === 200) {
     const hits = result.body?.snippets?.length ?? result.body?.items?.length ?? result.body?.results?.length
-    record(`RL-07/${book.short}`, `Поиск по книге отвечает (${book.title})`, 'pass', `hits=${hits ?? '?'}`)
+    record(`NA-04/${book.short}`, `Серверный поиск по книге отвечает (${book.title})`, 'pass', `hits=${hits ?? '?'}`)
   } else if (result.status === 404 && !result.body) {
-    record(`RL-07/${book.short}`, `Поиск по книге (${book.title})`, 'fail', 'HTML 404: роутер поиска не смонтирован (BOOK_SEARCH_ENABLED выключен) — чат с Наррой без серверного grounding')
+    record(`NA-04/${book.short}`, `Серверный поиск по книге (${book.title})`, 'skip', 'роутер поиска не смонтирован (BOOK_SEARCH_ENABLED выключен): grounding чата — через локальный индекс клиента')
+  } else if (result.status === 409) {
+    record(`NA-04/${book.short}`, `Серверный поиск по книге (${book.title})`, 'skip', `${result.body?.code || 409}: индекс ещё не построен — grounding через локальный индекс клиента`)
   } else {
-    record(`RL-07/${book.short}`, `Поиск по книге (${book.title})`, 'fail', `${result.status} ${result.body?.code || ''} ${result.body?.error || ''}`.trim())
+    record(`NA-04/${book.short}`, `Серверный поиск по книге (${book.title})`, 'fail', `${result.status} ${result.body?.code || ''} ${result.body?.error || ''}`.trim())
   }
+}
+
+function parseSseText(raw) {
+  let text = ''
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.startsWith('data:')) continue
+    const payload = line.slice(5).trim()
+    if (!payload || payload === '[DONE]') continue
+    try {
+      const chunk = JSON.parse(payload)
+      const delta = chunk?.choices?.[0]?.delta?.content ?? chunk?.choices?.[0]?.message?.content ?? chunk?.text
+      if (typeof delta === 'string') text += delta
+    } catch {}
+  }
+  return text.trim()
+}
+
+/** NA-01/NA-03: ассистент Narra отвечает о начале книги, по-русски, без спойлеров. */
+async function suiteAssistant(token, book) {
+  if (!LLM_ENABLED) { record(`NA-01/${book.short}`, `Чат с Наррой о книге (${book.title})`, 'skip', 'NARRA_EVALS_LLM=1 не задан'); return }
+  if (llmCalls + 2 > LLM_BUDGET) { record(`NA-01/${book.short}`, `Чат с Наррой о книге (${book.title})`, 'skip', 'бюджет LLM исчерпан'); return }
+  llmCalls += 1
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 120_000)
+  const started = Date.now()
+  let answer = ''
+  let failure = ''
+  try {
+    const response = await fetch(`${BASE}/v2/ai/chat/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      signal: controller.signal,
+      body: JSON.stringify({
+        purpose: 'assistant', origin: 'user', analytics_tier: 'essential', request_id: crypto.randomUUID(),
+        messages: [
+          { role: 'system', content: `Ты — Нарра, помощница читателя. Книга: «${book.title}» (${book.author}). Читатель прочитал 5 % книги: отвечай по-русски, коротко, только о начале книги и без спойлеров о дальнейших событиях.` },
+          { role: 'user', content: 'О чём начало этой книги и кто главный герой? Два-три предложения.' }
+        ]
+      })
+    })
+    const raw = await response.text()
+    if (response.status !== 200) failure = `${response.status} ${raw.slice(0, 160)}`
+    else answer = (response.headers.get('content-type') || '').includes('event-stream') ? parseSseText(raw) : (() => { try { return String(JSON.parse(raw).text || '') } catch { return raw.trim() } })()
+  } catch (error) {
+    failure = error?.name === 'AbortError' ? 'таймаут 120 с' : String(error?.message || error)
+  } finally {
+    clearTimeout(timer)
+  }
+  await sleep(2200)
+  const seconds = Math.round((Date.now() - started) / 1000)
+  if (failure || !answer) { record(`NA-01/${book.short}`, `Чат с Наррой отвечает (${book.title})`, 'fail', failure || 'пустой ответ'); return }
+  record(`NA-01/${book.short}`, `Чат с Наррой отвечает (${book.title})`, 'pass', `${answer.length} символов за ${seconds} с`, answer.slice(0, 300))
+  const judge = await llm(token, 'structured_task', [
+    { role: 'system', content: 'Ты строгий судья ответов книжного ассистента. Верни только JSON {"relevant":0-2,"no_spoiler":0-2,"language_ru":0-1,"reasons":"..."}. relevant: 2 — ответ действительно о начале этой книги и её главном герое; no_spoiler: 2 — не раскрывает события после начала; language_ru: 1 — по-русски.' },
+    { role: 'user', content: `Книга: «${book.title}» (${book.author}). Вопрос: о чём начало книги и кто главный герой. Ответ ассистента: ${answer.slice(0, 2500)}` }
+  ])
+  const verdict = judge && !judge.error ? parseJudge(judge.text) : null
+  if (!verdict) { record(`NA-03/${book.short}`, `Prompt compliance ассистента (${book.title})`, 'skip', judge?.error || 'судья не вернул JSON'); return }
+  const ok = Number(verdict.relevant) >= 1 && Number(verdict.no_spoiler) >= 1 && Number(verdict.language_ru) >= 1
+  record(`NA-03/${book.short}`, `Prompt compliance ассистента (${book.title})`, ok ? 'pass' : 'fail',
+    `judge=${JSON.stringify({ relevant: verdict.relevant, no_spoiler: verdict.no_spoiler, language_ru: verdict.language_ru })} ${String(verdict.reasons || '').slice(0, 160)}`)
 }
 
 function traitLooksLikeTrait(value) {
@@ -265,6 +331,7 @@ for (const book of books) {
   if (SUITES.has('manifest')) await suiteManifest(token, book, manifest)
   if (SUITES.has('scenes')) await suiteScenes(token, book)
   if (SUITES.has('search')) await suiteSearch(token, book)
+  if (SUITES.has('assistant')) await suiteAssistant(token, book)
   if (SUITES.has('profiles')) suiteProfiles(book, manifest)
   if (SUITES.has('text')) await suiteText(token, book)
   if (SUITES.has('chat')) await suiteChat(token, book, manifest)
