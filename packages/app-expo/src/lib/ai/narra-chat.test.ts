@@ -40,6 +40,32 @@ describe("completeNarraChat", () => {
     expect(body.purpose).toBe("character_chat");
   });
 
+  it("does not send character dialogue without a bound edition", async () => {
+    await expect(
+      completeNarraChat({
+        messages: [{ role: "user", content: "Что сказала Анна?" }],
+        purpose: "character_chat",
+      }),
+    ).rejects.toMatchObject({
+      name: "NarraServiceError",
+      backendCode: "SEARCH_NOT_READY",
+    });
+    expect(adapter).not.toHaveBeenCalled();
+  });
+
+  it("still allows memory without an edition", async () => {
+    adapter.mockResolvedValueOnce(jsonResponse({ text: "Читатель любит спорить." }));
+    await expect(
+      completeNarraChat({
+        messages: [{ role: "user", content: "Старая память: нет" }],
+        purpose: "memory",
+      }),
+    ).resolves.toBe("Читатель любит спорить.");
+    const body = JSON.parse(String(adapter.mock.calls[0]?.[1]?.body));
+    expect(body.purpose).toBe("memory");
+    expect(body.book_edition_id).toBeUndefined();
+  });
+
   it("preserves SEARCH_NOT_READY so the UI can refuse an off-book answer", async () => {
     adapter.mockResolvedValueOnce(
       jsonResponse(

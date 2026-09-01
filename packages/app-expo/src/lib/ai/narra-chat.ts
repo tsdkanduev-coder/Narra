@@ -59,19 +59,36 @@ async function readCompletion(response: Response): Promise<string> {
   return content;
 }
 
+const BOOK_DIALOGUE_PURPOSES = new Set(["character_chat"]);
+
+function boundBookEditionId(value?: string): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 export async function completeNarraChat(request: NarraChatRequest): Promise<string> {
   try {
     const origin = request.origin ?? "user";
+    const purpose = request.purpose ?? "character_chat";
+    const bookEditionId = boundBookEditionId(request.bookEditionId);
+    if (BOOK_DIALOGUE_PURPOSES.has(purpose) && !bookEditionId) {
+      throw new NarraServiceError(
+        "SERVICE",
+        "Поиск по книге ещё не готов (SEARCH_NOT_READY). Ответ без книги недоступен.",
+        undefined,
+        undefined,
+        "SEARCH_NOT_READY",
+      );
+    }
     const response = await narraGatewayRequest("/v2/ai/chat/complete", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         messages: request.messages,
         temperature: request.temperature ?? 0.8,
-        purpose: request.purpose ?? "character_chat",
+        purpose,
         origin,
         analytics_tier: request.analyticsTier ?? (origin === "background" ? "none" : "essential"),
-        ...(request.bookEditionId ? { book_edition_id: request.bookEditionId } : {}),
+        ...(bookEditionId ? { book_edition_id: bookEditionId } : {}),
       }),
     });
     return await readCompletion(response);

@@ -154,6 +154,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
 
   useEffect(() => {
     if (interfaceLanguage === "en" || !book || !character || character.chatPlaceholder) return;
+    if (!bookEditionId) return;
     if (placeholderRequestedRef.current === character.id) return;
     placeholderRequestedRef.current = character.id;
 
@@ -175,6 +176,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
           purpose: "character_chat",
           origin: "background",
           analyticsTier: "none",
+          bookEditionId,
         });
         const placeholder = normalizeCharacterChatPlaceholder(completion);
         if (placeholder) updateCharacter(bookId, characterId, { chatPlaceholder: placeholder });
@@ -183,7 +185,7 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
         reportNarraError("character_chat_placeholder", error);
       }
     })();
-  }, [book, bookId, character, characterId, interfaceLanguage, updateCharacter]);
+  }, [book, bookEditionId, bookId, character, characterId, interfaceLanguage, updateCharacter]);
 
   const conversation = useMemo<NarraChatMessageInput[]>(
     () =>
@@ -231,6 +233,10 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
 
     if (character.greeting && interfaceLanguage !== "en") {
       appendGreeting(character.greeting);
+      return;
+    }
+    if (!bookEditionId) {
+      greetingRequestedRef.current = false;
       return;
     }
 
@@ -324,6 +330,15 @@ export function NarraCharacterChatScreen(props: NarraCharacterChatScreenProps) {
     async (value: string) => {
       const text = value.trim();
       if (!text || !book || !character || !unlocked || sending) return;
+      if (!bookEditionId) {
+        toast.error(t("chat.searchNotReady", "SEARCH_NOT_READY"), {
+          description: t(
+            "chat.searchNotReadyMessage",
+            "Поиск по книге ещё не готов. Ответ без книги недоступен.",
+          ),
+        });
+        return;
+      }
       setSending(true);
       const userMessage: NarraChatMessage = {
         id: Crypto.randomUUID(),

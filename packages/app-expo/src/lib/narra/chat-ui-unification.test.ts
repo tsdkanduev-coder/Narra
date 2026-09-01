@@ -2,6 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const chatScreen = readFileSync(new URL("../../screens/ChatScreen.tsx", import.meta.url), "utf8");
+const characterChat = readFileSync(
+  new URL("../../screens/NarraCharacterChatScreen.tsx", import.meta.url),
+  "utf8",
+);
 const sharedChat = readFileSync(
   new URL("../../components/chat/NarraChat.tsx", import.meta.url),
   "utf8",
@@ -16,6 +20,14 @@ describe("Narra and character chat UI contract", () => {
     expect(chatScreen).toContain("SEARCH_NOT_READY");
     expect(chatScreen).toContain("Ничего не найдено");
     expect(chatScreen).not.toContain("/v2/ai/chat/stream");
+  });
+
+  it("refuses hero dialogue without a bound edition and never calls stream", () => {
+    expect(characterChat).toContain("completeNarraChat");
+    expect(characterChat).toContain("bookEditionId");
+    expect(characterChat).toContain("SEARCH_NOT_READY");
+    expect(characterChat).not.toContain("/v2/ai/chat/stream");
+    expect(characterChat).toContain("if (!bookEditionId)");
   });
 
   it("uses the standard top toast for Narra response failures", () => {
