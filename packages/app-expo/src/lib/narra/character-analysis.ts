@@ -19,10 +19,20 @@ import type { NarraCharacter } from "./types";
 import { detectFirstPerson } from "./voice-rules";
 
 const MAX_ANALYSIS_TEXT_LENGTH = 48_000;
+const SEARCH_NOT_READY_MESSAGE =
+  "Поиск по книге ещё не готов (SEARCH_NOT_READY). Ответ без книги недоступен.";
 
 export type CharacterAnalysisTextFallback = string | (() => Promise<string>);
 export interface CharacterAnalysisOptions {
   origin?: "user" | "background";
+}
+
+export function resolveAnalysisBookEditionId(book: Book): string | undefined {
+  if (typeof book.bookEditionId === "string" && book.bookEditionId.trim()) {
+    return book.bookEditionId.trim();
+  }
+  const bound = useNarraStore.getState().books?.[book.id]?.backendBinding?.bookEditionId;
+  return typeof bound === "string" && bound.trim() ? bound.trim() : undefined;
 }
 
 const activeAnalyses = new Map<string, Promise<NarraCharacter[]>>();
@@ -104,13 +114,23 @@ async function runBookCharacterAnalysis(
     const content = chunkText || fallbackText;
     const excerpt = createAnalysisExcerpt(content);
     if (!excerpt) throw new Error("No text could be extracted from the book");
-    const response = await narraGatewayRequest("/v2/ai/chat/stream", {
+    const bookEditionId = resolveAnalysisBookEditionId(book);
+    if (!bookEditionId) {
+      throw new NarraServiceError(
+        "SERVICE",
+        SEARCH_NOT_READY_MESSAGE,
+        undefined,
+        undefined,
+        "SEARCH_NOT_READY",
+      );
+    }
+    const response = await narraGatewayRequest("/v2/ai/chat/complete", {
       method: "POST",
       headers: {
-        accept: "text/event-stream",
         "content-type": "application/json",
       },
       body: JSON.stringify({
+        book_edition_id: bookEditionId,
         messages: [
           {
             role: "system",
@@ -178,7 +198,13 @@ async function runBookCharacterAnalysis(
       const normalized = normalizeNarraError(
         error?.code || error?.error || `HTTP ${response.status}`,
       );
-      throw new NarraServiceError(normalized.code, normalized.message, error?.request_id);
+      throw new NarraServiceError(
+        normalized.code,
+        normalized.message,
+        error?.request_id,
+        undefined,
+        error?.code || normalized.backendCode,
+      );
     }
     const rawAnalysis = await responseText(response);
     const genre = normalizeGenreAnalysisResponse(rawAnalysis);
