@@ -28,6 +28,7 @@ import {
 import { importBackendCatalogBook } from "@/lib/narra/backend-catalog-import";
 import { isCatalogBookRevisionCurrent } from "@/lib/narra/backend-catalog-library";
 import { BackendSceneError, isBackendSceneReady } from "@/lib/narra/backend-scene";
+import { readerCastForCharacters } from "@/lib/narra/reader-cast";
 import { backendSceneMarkupIdentity } from "@/lib/narra/backend-scene-identity";
 import { generateBackendReaderScene, readSceneDataUri } from "@/lib/narra/backend-scene-reader";
 import { backendSceneForAnchor } from "@/lib/narra/backend-scene-state";
@@ -699,9 +700,13 @@ function ReaderContent({ route, navigation }: Props) {
   // Снимок для обработчиков WebView (onRelocate живёт вне рендера).
   const backendSceneEnabledRef = useRef(backendSceneEnabled);
   backendSceneEnabledRef.current = backendSceneEnabled;
+  // Каст читалки (озвучка по ролям, кликабельные имена): бэкенд-герои при
+  // готовом манифесте, иначе локальные/встроенные — у импортных книг раньше
+  // каст был пустым, и каждая реплика звучала нарратором (C4-RC2).
+  const backendManifestForCast = backendBookStatus?.manifest;
   const characters = useMemo<NarraCharacter[]>(
-    () => (narraBookCharacters ?? []).filter((item) => item.backendManaged),
-    [narraBookCharacters],
+    () => [...readerCastForCharacters(narraBookCharacters, backendManifestForCast)],
+    [narraBookCharacters, backendManifestForCast],
   );
   // Ключ состава открытых персонажей: спека пересобирается только при unlock,
   // а не на каждом изменении прогресса
